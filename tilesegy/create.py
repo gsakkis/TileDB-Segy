@@ -125,6 +125,7 @@ def create(uri: str, segy_file: SegyFile, chunk_bytes: Optional[int] = None) -> 
         schema = _get_data_schema(segy_file)
         print(f"data schema: {schema}")
         tiledb.DenseArray.create(data_uri, schema)
+        _fill_data(data_uri, segy_file, chunk_bytes)
 
 
 def _get_headers_schema(segy_file: SegyFile) -> tiledb.ArraySchema:
@@ -259,7 +260,7 @@ def _fill_headers(
         _fill_unstructured_trace_headers(uri, segy_file, chunk_bytes)
     else:
         raise NotImplementedError
-    # TODO: populate metadata: samples_start_step, bin headers, text headers
+    # TODO: populate metadata: bin headers, text headers
 
 
 def _fill_unstructured_trace_headers(
@@ -282,6 +283,37 @@ def _fill_unstructured_trace_headers(
                     if v:
                         header_array[i] = v
             tdb[sl] = dict(zip(attrs, headers))
+        # TODO: consolidate fragments
+
+
+def _fill_data(
+    uri: str, segy_file: SegyFile, chunk_bytes: Optional[int] = None
+) -> None:
+    if segy_file.unstructured:
+        _fill_traces(uri, segy_file, chunk_bytes)
+    elif segy_file.fast is segy_file.ilines:
+        raise NotImplementedError
+    elif segy_file.fast is segy_file.xlines:
+        raise NotImplementedError
+    else:
+        raise AssertionError("Unknown sorting.")
+    # TODO: populate metadata: samples_start_step
+
+
+def _fill_traces(
+    uri: str, segy_file: SegyFile, chunk_bytes: Optional[int] = None
+) -> None:
+    num_samples = len(segy_file.samples)
+    dtype = segy_file.dtype
+    if chunk_bytes is not None:
+        step = np.clip(
+            chunk_bytes // (num_samples * dtype.itemsize), 1, segy_file.tracecount
+        )
+    else:
+        step = segy_file.tracecount
+    with tiledb.DenseArray(uri, mode="w") as tdb:
+        for sl in _iter_slices(segy_file.tracecount, step):
+            tdb[sl] = segy_file.trace.raw[sl]
         # TODO: consolidate fragments
 
 
