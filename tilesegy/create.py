@@ -118,14 +118,16 @@ def create(uri: str, segy_file: SegyFile, chunk_bytes: Optional[int] = None) -> 
         schema = _get_headers_schema(segy_file)
         print(f"header schema: {schema}")
         tiledb.DenseArray.create(headers_uri, schema)
-        _fill_headers(headers_uri, segy_file, chunk_bytes)
+        with tiledb.DenseArray(headers_uri, mode="w") as tdb:
+            _fill_headers(tdb, segy_file, chunk_bytes)
 
     data_uri = os.path.join(uri, "data")
     if tiledb.object_type(data_uri) != "array":
         schema = _get_data_schema(segy_file)
         print(f"data schema: {schema}")
         tiledb.DenseArray.create(data_uri, schema)
-        _fill_data(data_uri, segy_file, chunk_bytes)
+        with tiledb.DenseArray(data_uri, mode="w") as tdb:
+            _fill_data(tdb, segy_file, chunk_bytes)
 
 
 def _get_headers_schema(segy_file: SegyFile) -> tiledb.ArraySchema:
@@ -254,43 +256,42 @@ def _get_structured_data_dims(segy_file: SegyFile) -> Sequence[tiledb.Dim]:
 
 
 def _fill_headers(
-    uri: str, segy_file: SegyFile, chunk_bytes: Optional[int] = None
+    tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: Optional[int] = None
 ) -> None:
     if segy_file.unstructured:
-        _fill_unstructured_trace_headers(uri, segy_file, chunk_bytes)
+        _fill_unstructured_trace_headers(tdb, segy_file, chunk_bytes)
     else:
         raise NotImplementedError
     # TODO: populate metadata: bin headers, text headers
 
 
 def _fill_unstructured_trace_headers(
-    uri: str, segy_file: SegyFile, chunk_bytes: Optional[int] = None
+    tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: Optional[int] = None
 ) -> None:
     attrs = tuple(map(str, segyio.field.Field._tr_keys))
     if chunk_bytes is not None:
         step = np.clip(chunk_bytes // TRACE_FIELDS_SIZE, 1, segy_file.tracecount)
     else:
         step = segy_file.tracecount
-    with tiledb.DenseArray(uri, mode="w") as tdb:
-        for sl in _iter_slices(segy_file.tracecount, step):
-            headers = [
-                np.zeros(sl.stop - sl.start, TRACE_FIELD_DTYPES[attr]) for attr in attrs
-            ]
-            for i, field in enumerate(segy_file.header[sl]):
-                getfield, buf = field.getfield, field.buf
-                for key, header_array in zip(field.keys(), headers):
-                    v = getfield(buf, key)
-                    if v:
-                        header_array[i] = v
-            tdb[sl] = dict(zip(attrs, headers))
+    for sl in _iter_slices(segy_file.tracecount, step):
+        headers = [
+            np.zeros(sl.stop - sl.start, TRACE_FIELD_DTYPES[attr]) for attr in attrs
+        ]
+        for i, field in enumerate(segy_file.header[sl]):
+            getfield, buf = field.getfield, field.buf
+            for key, header_array in zip(field.keys(), headers):
+                v = getfield(buf, key)
+                if v:
+                    header_array[i] = v
+        tdb[sl] = dict(zip(attrs, headers))
         # TODO: consolidate fragments
 
 
 def _fill_data(
-    uri: str, segy_file: SegyFile, chunk_bytes: Optional[int] = None
+    tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: Optional[int] = None
 ) -> None:
     if segy_file.unstructured:
-        _fill_traces(uri, segy_file, chunk_bytes)
+        _fill_traces(tdb, segy_file, chunk_bytes)
     elif segy_file.fast is segy_file.ilines:
         raise NotImplementedError
     elif segy_file.fast is segy_file.xlines:
@@ -301,7 +302,7 @@ def _fill_data(
 
 
 def _fill_traces(
-    uri: str, segy_file: SegyFile, chunk_bytes: Optional[int] = None
+    tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: Optional[int] = None
 ) -> None:
     num_samples = len(segy_file.samples)
     dtype = segy_file.dtype
@@ -311,10 +312,9 @@ def _fill_traces(
         )
     else:
         step = segy_file.tracecount
-    with tiledb.DenseArray(uri, mode="w") as tdb:
-        for sl in _iter_slices(segy_file.tracecount, step):
-            tdb[sl] = segy_file.trace.raw[sl]
-        # TODO: consolidate fragments
+    for sl in _iter_slices(segy_file.tracecount, step):
+        tdb[sl] = segy_file.trace.raw[sl]
+    # TODO: consolidate fragments
 
 
 def _find_shortest_dtype(values: Collection[Number]) -> np.dtype:
