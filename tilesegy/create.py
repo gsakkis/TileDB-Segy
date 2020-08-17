@@ -1,5 +1,5 @@
 import os
-from typing import Collection, Sequence, Union
+from typing import Collection, Iterator, Optional, Sequence, Union
 
 import numpy as np
 import tiledb
@@ -109,7 +109,7 @@ TRACE_FIELD_FILTERS = (
 MAX_TILESIZE = 2 ** 16
 
 
-def create(uri: str, segy_file: SegyFile) -> None:
+def create(uri: str, segy_file: SegyFile, chunk_bytes: Optional[int] = None) -> None:
     if tiledb.object_type(uri) != "group":
         tiledb.group_create(uri)
 
@@ -118,6 +118,7 @@ def create(uri: str, segy_file: SegyFile) -> None:
         schema = _get_headers_schema(segy_file)
         print(f"header schema: {schema}")
         tiledb.DenseArray.create(headers_uri, schema)
+        _fill_headers(headers_uri, segy_file, chunk_bytes)
 
     data_uri = os.path.join(uri, "data")
     if tiledb.object_type(data_uri) != "array":
@@ -251,6 +252,39 @@ def _get_structured_data_dims(segy_file: SegyFile) -> Sequence[tiledb.Dim]:
     return dims
 
 
+def _fill_headers(
+    uri: str, segy_file: SegyFile, chunk_bytes: Optional[int] = None
+) -> None:
+    if segy_file.unstructured:
+        _fill_unstructured_trace_headers(uri, segy_file, chunk_bytes)
+    else:
+        raise NotImplementedError
+    # TODO: populate metadata: samples_start_step, bin headers, text headers
+
+
+def _fill_unstructured_trace_headers(
+    uri: str, segy_file: SegyFile, chunk_bytes: Optional[int] = None
+) -> None:
+    attrs = tuple(map(str, segyio.field.Field._tr_keys))
+    if chunk_bytes is not None:
+        step = np.clip(chunk_bytes // TRACE_FIELDS_SIZE, 1, segy_file.tracecount)
+    else:
+        step = segy_file.tracecount
+    with tiledb.DenseArray(uri, mode="w") as tdb:
+        for sl in _iter_slices(segy_file.tracecount, step):
+            headers = [
+                np.zeros(sl.stop - sl.start, TRACE_FIELD_DTYPES[attr]) for attr in attrs
+            ]
+            for i, field in enumerate(segy_file.header[sl]):
+                getfield, buf = field.getfield, field.buf
+                for key, header_array in zip(field.keys(), headers):
+                    v = getfield(buf, key)
+                    if v:
+                        header_array[i] = v
+            tdb[sl] = dict(zip(attrs, headers))
+        # TODO: consolidate fragments
+
+
 def _find_shortest_dtype(values: Collection[Number]) -> np.dtype:
     min_value = min(values)
     max_value = max(values)
@@ -267,6 +301,12 @@ def _find_shortest_dtype(values: Collection[Number]) -> np.dtype:
         info = np.iinfo(dt)
         if info.min <= min_value <= max_value <= info.max:
             return dt
+
+
+def _iter_slices(size: int, step: int) -> Iterator[slice]:
+    r = range(0, size, step)
+    yield from map(slice, r, r[1:])
+    yield slice(r[-1], size)
 
 
 if __name__ == "__main__":
