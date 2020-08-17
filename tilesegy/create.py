@@ -290,6 +290,8 @@ def _fill_unstructured_trace_headers(
 def _fill_data(
     tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: Optional[int] = None
 ) -> None:
+    samples_step = _ensure_range(segy_file.samples)
+    tdb.meta["samples_start_step"] = (segy_file.samples[0], samples_step)
     if segy_file.unstructured:
         _fill_traces(tdb, segy_file, chunk_bytes)
     elif segy_file.fast is segy_file.ilines:
@@ -298,7 +300,6 @@ def _fill_data(
         raise NotImplementedError
     else:
         raise AssertionError("Unknown sorting.")
-    # TODO: populate metadata: samples_start_step
 
 
 def _fill_traces(
@@ -339,6 +340,16 @@ def _iter_slices(size: int, step: int) -> Iterator[slice]:
     r = range(0, size, step)
     yield from map(slice, r, r[1:])
     yield slice(r[-1], size)
+
+
+def _ensure_range(values: np.ndarray) -> Number:
+    if len(values) < 2:
+        return 1
+    steps = values[1:] - values[:-1]
+    step = steps[0]
+    if not np.allclose(steps, step):
+        raise ValueError(f"Values are not a range: {values}")
+    return step
 
 
 if __name__ == "__main__":
