@@ -258,11 +258,14 @@ def _get_structured_data_dims(segy_file: SegyFile) -> Sequence[tiledb.Dim]:
 def _fill_headers(
     tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: Optional[int] = None
 ) -> None:
+    for i, text in enumerate(segy_file.text):
+        tdb.meta[f"text_{i}"] = bytes(text)
+    for k, v in segy_file.bin.items():
+        tdb.meta[f"bin_{k}"] = v
     if segy_file.unstructured:
         _fill_unstructured_trace_headers(tdb, segy_file, chunk_bytes)
     else:
         raise NotImplementedError
-    # TODO: populate metadata: bin headers, text headers
 
 
 def _fill_unstructured_trace_headers(
