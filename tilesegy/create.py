@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Collection, Iterator, Optional, Sequence, Union
+from typing import Collection, Iterator, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import tiledb
@@ -273,7 +273,9 @@ def _get_structured_data_dims(segy_file: SegyFile) -> Sequence[tiledb.Dim]:
         ),
     ]
     if len(domains) == 4:
-        dims.append(tiledb.Dim(name="offsets", domain=domains[3], dtype=dtype, tile=1))
+        dims.insert(
+            2, tiledb.Dim(name="offsets", domain=domains[3], dtype=dtype, tile=1)
+        )
     return dims
 
 
@@ -287,7 +289,8 @@ def _fill_headers(
     if segy_file.unstructured:
         _fill_unstructured_trace_headers(tdb, segy_file, chunk_bytes)
     else:
-        raise NotImplementedError
+        # raise NotImplementedError
+        pass
 
 
 def _fill_unstructured_trace_headers(
@@ -316,16 +319,12 @@ def _fill_data(
     samples_step = _ensure_range(segy_file.samples)
     tdb.meta["samples_start_step"] = (segy_file.samples[0], samples_step)
     if segy_file.unstructured:
-        _fill_traces(tdb, segy_file, chunk_bytes)
-    elif segy_file.fast is segy_file.ilines:
-        raise NotImplementedError
-    elif segy_file.fast is segy_file.xlines:
-        raise NotImplementedError
+        _fill_unstructured_data(tdb, segy_file, chunk_bytes)
     else:
-        raise AssertionError("Unknown sorting.")
+        _fill_structured_data(tdb, segy_file, chunk_bytes)
 
 
-def _fill_traces(
+def _fill_unstructured_data(
     tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: Optional[int] = None
 ) -> None:
     num_samples = len(segy_file.samples)
@@ -338,6 +337,57 @@ def _fill_traces(
         step = segy_file.tracecount
     for sl in _iter_slices(segy_file.tracecount, step):
         tdb[sl] = segy_file.trace.raw[sl]
+
+
+def _fill_structured_data(
+    tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: Optional[int] = None
+) -> None:
+    num_samples = len(segy_file.samples)
+    cell_size = segy_file.dtype.itemsize
+    ilines, xlines = segy_file.ilines, segy_file.xlines
+    if segy_file.fast is segy_file.iline:
+        if chunk_bytes is not None:
+            step = np.clip(
+                chunk_bytes // (len(xlines) * num_samples * cell_size), 1, len(ilines),
+            )
+        else:
+            step = len(ilines)
+    else:
+        if chunk_bytes is not None:
+            step = np.clip(
+                chunk_bytes // (len(ilines) * num_samples * cell_size), 1, len(xlines),
+            )
+        else:
+            step = len(xlines)
+
+    if tdb.schema.domain.has_dim("offsets"):
+        for i_offset, offset in enumerate(segy_file.offsets):
+            for islice, xslice, subcube in _iter_subcubes(segy_file, step, offset):
+                tdb[islice, xslice, i_offset] = subcube
+    else:
+        for islice, xslice, subcube in _iter_subcubes(segy_file, step):
+            tdb[islice, xslice] = subcube
+
+
+def _iter_subcubes(
+    segy_file: SegyFile, step: int, offset: Optional[int] = None
+) -> Iterator[Tuple[slice, slice, np.ndarray]]:
+    fast_line = segy_file.fast
+    if fast_line is segy_file.iline:
+        fast_lines = segy_file.ilines
+        axis = 0
+    else:
+        fast_lines = segy_file.xlines
+        axis = 1
+    if offset is None:
+        offset = fast_line.default_offset
+    full_slice = slice(None, None)
+    for fast_slice in _iter_slices(len(fast_lines), step):
+        subcube = np.stack(
+            [fast_line[i, offset] for i in fast_lines[fast_slice]], axis=axis
+        )
+        slices = (fast_slice, full_slice)
+        yield slices[axis], slices[1 - axis], subcube
 
 
 def _find_shortest_dtype(values: Collection[Number]) -> np.dtype:
