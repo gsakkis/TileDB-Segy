@@ -4,6 +4,7 @@ from typing import Collection, Iterator, Optional, Sequence, Union
 import numpy as np
 import tiledb
 from segyio import SegyFile
+from segyio.field import Field
 
 Number = Union[int, float, np.number]
 
@@ -98,6 +99,8 @@ TRACE_FIELD_DTYPES = {
     "SourceMeasurementExponent": np.int16,
     "SourceMeasurementUnit": np.int16,
 }
+assert frozenset(TRACE_FIELD_DTYPES.keys()).issubset(map(str, Field._tr_keys))
+
 TRACE_FIELDS_SIZE = sum(
     np.dtype(dtype).itemsize for dtype in TRACE_FIELD_DTYPES.values()
 )
@@ -120,6 +123,8 @@ def create(uri: str, segy_file: SegyFile, chunk_bytes: Optional[int] = None) -> 
         tiledb.DenseArray.create(headers_uri, schema)
         with tiledb.DenseArray(headers_uri, mode="w") as tdb:
             _fill_headers(tdb, segy_file, chunk_bytes)
+        tiledb.consolidate(headers_uri)
+        tiledb.vacuum(headers_uri)
 
     data_uri = os.path.join(uri, "data")
     if tiledb.object_type(data_uri) != "array":
@@ -128,6 +133,8 @@ def create(uri: str, segy_file: SegyFile, chunk_bytes: Optional[int] = None) -> 
         tiledb.DenseArray.create(data_uri, schema)
         with tiledb.DenseArray(data_uri, mode="w") as tdb:
             _fill_data(tdb, segy_file, chunk_bytes)
+        tiledb.consolidate(data_uri)
+        tiledb.vacuum(data_uri)
 
 
 def _get_headers_schema(segy_file: SegyFile) -> tiledb.ArraySchema:
@@ -271,14 +278,13 @@ def _fill_headers(
 def _fill_unstructured_trace_headers(
     tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: Optional[int] = None
 ) -> None:
-    attrs = tuple(map(str, segyio.field.Field._tr_keys))
     if chunk_bytes is not None:
         step = np.clip(chunk_bytes // TRACE_FIELDS_SIZE, 1, segy_file.tracecount)
     else:
         step = segy_file.tracecount
     for sl in _iter_slices(segy_file.tracecount, step):
         headers = [
-            np.zeros(sl.stop - sl.start, TRACE_FIELD_DTYPES[attr]) for attr in attrs
+            np.zeros(sl.stop - sl.start, dtype) for dtype in TRACE_FIELD_DTYPES.values()
         ]
         for i, field in enumerate(segy_file.header[sl]):
             getfield, buf = field.getfield, field.buf
@@ -286,8 +292,7 @@ def _fill_unstructured_trace_headers(
                 v = getfield(buf, key)
                 if v:
                     header_array[i] = v
-        tdb[sl] = dict(zip(attrs, headers))
-        # TODO: consolidate fragments
+        tdb[sl] = dict(zip(TRACE_FIELD_DTYPES.keys(), headers))
 
 
 def _fill_data(
@@ -318,7 +323,6 @@ def _fill_traces(
         step = segy_file.tracecount
     for sl in _iter_slices(segy_file.tracecount, step):
         tdb[sl] = segy_file.trace.raw[sl]
-    # TODO: consolidate fragments
 
 
 def _find_shortest_dtype(values: Collection[Number]) -> np.dtype:
