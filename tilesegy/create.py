@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Collection, Iterator, Optional, Sequence, Union
 
@@ -111,6 +112,8 @@ TRACE_FIELD_FILTERS = (
 )
 MAX_TILESIZE = 2 ** 16
 
+logger = logging.getLogger(__name__)
+
 
 def create(uri: str, segy_file: SegyFile, chunk_bytes: Optional[int] = None) -> None:
     if tiledb.object_type(uri) != "group":
@@ -118,23 +121,35 @@ def create(uri: str, segy_file: SegyFile, chunk_bytes: Optional[int] = None) -> 
 
     headers_uri = os.path.join(uri, "headers")
     if tiledb.object_type(headers_uri) != "array":
-        schema = _get_headers_schema(segy_file)
-        print(f"header schema: {schema}")
-        tiledb.DenseArray.create(headers_uri, schema)
-        with tiledb.DenseArray(headers_uri, mode="w") as tdb:
-            _fill_headers(tdb, segy_file, chunk_bytes)
-        tiledb.consolidate(headers_uri)
-        tiledb.vacuum(headers_uri)
+        _create_headers_array(headers_uri, segy_file, chunk_bytes)
 
     data_uri = os.path.join(uri, "data")
     if tiledb.object_type(data_uri) != "array":
-        schema = _get_data_schema(segy_file)
-        print(f"data schema: {schema}")
-        tiledb.DenseArray.create(data_uri, schema)
-        with tiledb.DenseArray(data_uri, mode="w") as tdb:
-            _fill_data(tdb, segy_file, chunk_bytes)
-        tiledb.consolidate(data_uri)
-        tiledb.vacuum(data_uri)
+        _create_data_array(data_uri, segy_file, chunk_bytes)
+
+
+def _create_headers_array(
+    uri: str, segy_file: SegyFile, chunk_bytes: Optional[int] = None
+) -> None:
+    schema = _get_headers_schema(segy_file)
+    logger.info(f"header schema: {schema}")
+    tiledb.DenseArray.create(uri, schema)
+    with tiledb.DenseArray(uri, mode="w") as tdb:
+        _fill_headers(tdb, segy_file, chunk_bytes)
+    tiledb.consolidate(uri)
+    tiledb.vacuum(uri)
+
+
+def _create_data_array(
+    uri: str, segy_file: SegyFile, chunk_bytes: Optional[int] = None
+) -> None:
+    schema = _get_data_schema(segy_file)
+    logger.info(f"data schema: {schema}")
+    tiledb.DenseArray.create(uri, schema)
+    with tiledb.DenseArray(uri, mode="w") as tdb:
+        _fill_data(tdb, segy_file, chunk_bytes)
+    tiledb.consolidate(uri)
+    tiledb.vacuum(uri)
 
 
 def _get_headers_schema(segy_file: SegyFile) -> tiledb.ArraySchema:
