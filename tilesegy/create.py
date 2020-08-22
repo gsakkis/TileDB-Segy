@@ -305,11 +305,14 @@ def _iter_subcube_headers(
 def _fill_data(
     tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: Optional[int] = None
 ) -> None:
-    samples_step = _ensure_range(segy_file.samples)
-    tdb.meta["samples_start_step"] = (segy_file.samples[0], samples_step)
+    tdb.meta["samples"] = segy_file.samples.tolist()
     if segy_file.unstructured:
         _fill_unstructured_data(tdb, segy_file, chunk_bytes)
     else:
+        tdb.meta["ilines"] = segy_file.ilines.tolist()
+        tdb.meta["xlines"] = segy_file.xlines.tolist()
+        if tdb.schema.domain.has_dim("offsets"):
+            tdb.meta["offsets"] = segy_file.offsets.tolist()
         _fill_structured_data(tdb, segy_file, chunk_bytes)
 
 
@@ -404,16 +407,6 @@ def _iter_slices(size: int, step: int) -> Iterator[slice]:
     r = range(0, size, step)
     yield from map(slice, r, r[1:])
     yield slice(r[-1], size)
-
-
-def _ensure_range(values: np.ndarray) -> Number:
-    if len(values) < 2:
-        return 1
-    steps = values[1:] - values[:-1]
-    step = steps[0]
-    if not np.allclose(steps, step):
-        raise ValueError(f"Values are not a range: {values}")
-    return step
 
 
 if __name__ == "__main__":
