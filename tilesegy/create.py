@@ -1,110 +1,36 @@
 import logging
 import os
+from collections import namedtuple
 from typing import Collection, Iterator, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import tiledb
-from segyio import SegyFile
+from segyio import SegyFile, TraceField
 from segyio.field import Field
 
 Number = Union[int, float, np.number]
+TypedTraceField = namedtuple("TypedTraceField", ["name", "enum", "dtype"])
 
-TRACE_FIELD_DTYPES = {
-    "TRACE_SEQUENCE_LINE": np.int32,
-    "TRACE_SEQUENCE_FILE": np.int32,
-    "FieldRecord": np.int32,
-    "TraceNumber": np.int32,
-    "EnergySourcePoint": np.int32,
-    "CDP": np.int32,
-    "CDP_TRACE": np.int32,
-    "TraceIdentificationCode": np.int16,
-    "NSummedTraces": np.int16,
-    "NStackedTraces": np.int16,
-    "DataUse": np.int16,
-    "offset": np.int32,
-    "ReceiverGroupElevation": np.int32,
-    "SourceSurfaceElevation": np.int32,
-    "SourceDepth": np.int32,
-    "ReceiverDatumElevation": np.int32,
-    "SourceDatumElevation": np.int32,
-    "SourceWaterDepth": np.int32,
-    "GroupWaterDepth": np.int32,
-    "ElevationScalar": np.int16,
-    "SourceGroupScalar": np.int16,
-    "SourceX": np.int32,
-    "SourceY": np.int32,
-    "GroupX": np.int32,
-    "GroupY": np.int32,
-    "CoordinateUnits": np.int16,
-    "WeatheringVelocity": np.int16,
-    "SubWeatheringVelocity": np.int16,
-    "SourceUpholeTime": np.int16,
-    "GroupUpholeTime": np.int16,
-    "SourceStaticCorrection": np.int16,
-    "GroupStaticCorrection": np.int16,
-    "TotalStaticApplied": np.int16,
-    "LagTimeA": np.int16,
-    "LagTimeB": np.int16,
-    "DelayRecordingTime": np.int16,
-    "MuteTimeStart": np.int16,
-    "MuteTimeEND": np.int16,
-    "TRACE_SAMPLE_COUNT": np.int16,
-    "TRACE_SAMPLE_INTERVAL": np.int16,
-    "GainType": np.int16,
-    "InstrumentGainConstant": np.int16,
-    "InstrumentInitialGain": np.int16,
-    "Correlated": np.int16,
-    "SweepFrequencyStart": np.int16,
-    "SweepFrequencyEnd": np.int16,
-    "SweepLength": np.int16,
-    "SweepType": np.int16,
-    "SweepTraceTaperLengthStart": np.int16,
-    "SweepTraceTaperLengthEnd": np.int16,
-    "TaperType": np.int16,
-    "AliasFilterFrequency": np.int16,
-    "AliasFilterSlope": np.int16,
-    "NotchFilterFrequency": np.int16,
-    "NotchFilterSlope": np.int16,
-    "LowCutFrequency": np.int16,
-    "HighCutFrequency": np.int16,
-    "LowCutSlope": np.int16,
-    "HighCutSlope": np.int16,
-    "YearDataRecorded": np.int16,
-    "DayOfYear": np.int16,
-    "HourOfDay": np.int16,
-    "MinuteOfHour": np.int16,
-    "SecondOfMinute": np.int16,
-    "TimeBaseCode": np.int16,
-    "TraceWeightingFactor": np.int16,
-    "GeophoneGroupNumberRoll1": np.int16,
-    "GeophoneGroupNumberFirstTraceOrigField": np.int16,
-    "GeophoneGroupNumberLastTraceOrigField": np.int16,
-    "GapSize": np.int16,
-    "OverTravel": np.int16,
-    "CDP_X": np.int32,
-    "CDP_Y": np.int32,
-    "INLINE_3D": np.int32,
-    "CROSSLINE_3D": np.int32,
-    "ShotPoint": np.int32,
-    "ShotPointScalar": np.int16,
-    "TraceValueMeasurementUnit": np.int16,
-    "TransductionConstantMantissa": np.int32,
-    "TransductionConstantPower": np.int16,
-    "TransductionUnit": np.int16,
-    "TraceIdentifier": np.int16,
-    "ScalarTraceHeader": np.int16,
-    "SourceType": np.int16,
-    "SourceEnergyDirectionMantissa": np.int32,
-    "SourceEnergyDirectionExponent": np.int16,
-    "SourceMeasurementMantissa": np.int32,
-    "SourceMeasurementExponent": np.int16,
-    "SourceMeasurementUnit": np.int16,
-}
-assert frozenset(TRACE_FIELD_DTYPES.keys()).issubset(map(str, Field._tr_keys))
 
-TRACE_FIELDS_SIZE = sum(
-    np.dtype(dtype).itemsize for dtype in TRACE_FIELD_DTYPES.values()
-)
+def iter_typed_trace_fields(
+    exclude: Collection[Union[TraceField, str]] = ()
+) -> Iterator[TypedTraceField]:
+    all_fields = TraceField.enums()
+    include_names = set(map(str, Field._tr_keys))
+    for f in exclude:
+        include_names.remove(str(f))
+    size2dtype = {2: np.dtype(np.int16), 4: np.dtype(np.int32)}
+    for f, f2 in zip(all_fields, all_fields[1:]):
+        name = str(f)
+        if name in include_names:
+            yield TypedTraceField(name, f, size2dtype[int(f2) - int(f)])
+
+
+TRACE_FIELDS = tuple(iter_typed_trace_fields())
+TRACE_FIELD_ENUMS = tuple(f.enum for f in TRACE_FIELDS)
+TRACE_FIELD_NAMES = tuple(f.name for f in TRACE_FIELDS)
+TRACE_FIELD_DTYPES = tuple(f.dtype for f in TRACE_FIELDS)
+TRACE_FIELDS_SIZE = sum(dtype.itemsize for dtype in TRACE_FIELD_DTYPES)
 TRACE_FIELD_FILTERS = (
     tiledb.BitWidthReductionFilter(),
     tiledb.ByteShuffleFilter(),
@@ -160,8 +86,8 @@ def _get_headers_schema(segy_file: SegyFile) -> tiledb.ArraySchema:
     return tiledb.ArraySchema(
         domain=tiledb.Domain(*dims),
         attrs=[
-            tiledb.Attr(name, dtype, filters=TRACE_FIELD_FILTERS)
-            for name, dtype in TRACE_FIELD_DTYPES.items()
+            tiledb.Attr(f.name, f.dtype, filters=TRACE_FIELD_FILTERS)
+            for f in TRACE_FIELDS
         ],
     )
 
@@ -301,16 +227,14 @@ def _fill_unstructured_trace_headers(
     else:
         step = segy_file.tracecount
     for sl in _iter_slices(segy_file.tracecount, step):
-        headers = [
-            np.zeros(sl.stop - sl.start, dtype) for dtype in TRACE_FIELD_DTYPES.values()
-        ]
+        headers = [np.zeros(sl.stop - sl.start, dtype) for dtype in TRACE_FIELD_DTYPES]
         for i, field in enumerate(segy_file.header[sl]):
             getfield, buf = field.getfield, field.buf
-            for key, header_array in zip(field.keys(), headers):
+            for key, header in zip(TRACE_FIELD_ENUMS, headers):
                 v = getfield(buf, key)
                 if v:
-                    header_array[i] = v
-        tdb[sl] = dict(zip(TRACE_FIELD_DTYPES.keys(), headers))
+                    header[i] = v
+        tdb[sl] = dict(zip(TRACE_FIELD_NAMES, headers))
 
 
 def _fill_data(
