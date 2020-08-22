@@ -215,8 +215,7 @@ def _fill_headers(
     if segy_file.unstructured:
         _fill_unstructured_trace_headers(tdb, segy_file, chunk_bytes)
     else:
-        # raise NotImplementedError
-        pass
+        _fill_structured_trace_headers(tdb, segy_file, chunk_bytes)
 
 
 def _fill_unstructured_trace_headers(
@@ -235,6 +234,72 @@ def _fill_unstructured_trace_headers(
                 if v:
                     header[i] = v
         tdb[sl] = dict(zip(TRACE_FIELD_NAMES, headers))
+
+
+def _fill_structured_trace_headers(
+    tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: Optional[int] = None
+) -> None:
+    ilines, xlines = segy_file.ilines, segy_file.xlines
+    if segy_file.fast is segy_file.iline:
+        if chunk_bytes is not None:
+            step = np.clip(
+                chunk_bytes // (len(xlines) * TRACE_FIELDS_SIZE), 1, len(ilines),
+            )
+        else:
+            step = len(ilines)
+    else:
+        if chunk_bytes is not None:
+            step = np.clip(
+                chunk_bytes // (len(ilines) * TRACE_FIELDS_SIZE), 1, len(xlines),
+            )
+        else:
+            step = len(xlines)
+
+    if tdb.schema.domain.has_dim("offsets"):
+        for i_offset, offset in enumerate(segy_file.offsets):
+            for islice, xslice, subcube in _iter_subcube_headers(
+                segy_file, step, offset
+            ):
+                tdb[islice, xslice, i_offset] = subcube
+    else:
+        for islice, xslice, subcube in _iter_subcube_headers(segy_file, step):
+            tdb[islice, xslice] = subcube
+
+
+def _iter_subcube_headers(
+    segy_file: SegyFile, step: int, offset: Optional[int] = None
+) -> Iterator[Tuple[slice, slice, np.ndarray]]:
+    if segy_file.fast is segy_file.iline:
+        fast_headers = segy_file.header.iline
+        fast_lines = segy_file.ilines
+        slow_lines = segy_file.xlines
+        axis = 0
+    else:
+        fast_headers = segy_file.header.xline
+        fast_lines = segy_file.xlines
+        slow_lines = segy_file.ilines
+        axis = 1
+    if offset is None:
+        offset = segy_file.fast.default_offset
+    islice = xslice = slice(None, None)
+    for fast_slice in _iter_slices(len(fast_lines), step):
+        headers = [
+            np.zeros((fast_slice.stop - fast_slice.start, len(slow_lines)), dtype)
+            for dtype in TRACE_FIELD_DTYPES
+        ]
+        for i, line_id in enumerate(fast_lines[fast_slice]):
+            for j, field in enumerate(fast_headers[line_id, offset]):
+                getfield, buf = field.getfield, field.buf
+                for key, header in zip(TRACE_FIELD_ENUMS, headers):
+                    v = getfield(buf, key)
+                    if v:
+                        header[i, j] = v
+        if axis == 0:
+            islice = fast_slice
+        else:
+            xslice = fast_slice
+            headers = [h.T for h in headers]
+        yield islice, xslice, dict(zip(TRACE_FIELD_NAMES, headers))
 
 
 def _fill_data(
@@ -305,13 +370,16 @@ def _iter_subcubes(
         axis = 1
     if offset is None:
         offset = fast_line.default_offset
-    full_slice = slice(None, None)
+    islice = xslice = slice(None, None)
     for fast_slice in _iter_slices(len(fast_lines), step):
         subcube = np.stack(
             [fast_line[i, offset] for i in fast_lines[fast_slice]], axis=axis
         )
-        slices = (fast_slice, full_slice)
-        yield slices[axis], slices[1 - axis], subcube
+        if axis == 0:
+            islice = fast_slice
+        else:
+            xslice = fast_slice
+        yield islice, xslice, subcube
 
 
 def _find_shortest_dtype(values: Collection[Number]) -> np.dtype:
