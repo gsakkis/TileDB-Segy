@@ -114,31 +114,29 @@ def _get_unstructured_header_dims(
 def _get_structured_header_dims(
     segy_file: SegyFile, tile_size: int
 ) -> Sequence[tiledb.Dim]:
-    ilines, xlines, offsets = segy_file.ilines, segy_file.xlines, segy_file.offsets
+    ilines, xlines, offsets = map(
+        len, (segy_file.ilines, segy_file.xlines, segy_file.offsets)
+    )
     dtype = np.uintc
+
+    if segy_file.fast is segy_file.iline:
+        iline_tile = np.clip(tile_size // (xlines * TRACE_FIELDS_SIZE), 1, ilines)
+        xline_tile = xlines
+    else:
+        iline_tile = ilines
+        xline_tile = np.clip(tile_size // (ilines * TRACE_FIELDS_SIZE), 1, xlines)
+
     dims = [
         tiledb.Dim(
-            name="ilines",
-            domain=(0, len(ilines) - 1),
-            dtype=dtype,
-            tile=np.clip(
-                tile_size // (len(xlines) * TRACE_FIELDS_SIZE), 1, len(ilines),
-            ),
+            name="ilines", domain=(0, ilines - 1), dtype=dtype, tile=iline_tile,
         ),
         tiledb.Dim(
-            name="xlines",
-            domain=(0, len(xlines) - 1),
-            dtype=dtype,
-            tile=np.clip(
-                tile_size // (len(ilines) * TRACE_FIELDS_SIZE), 1, len(xlines),
-            ),
+            name="xlines", domain=(0, xlines - 1), dtype=dtype, tile=xline_tile,
         ),
     ]
-    if len(offsets) > 1:
+    if offsets > 1:
         dims.append(
-            tiledb.Dim(
-                name="offsets", domain=(0, len(offsets) - 1), dtype=dtype, tile=1
-            )
+            tiledb.Dim(name="offsets", domain=(0, offsets - 1), dtype=dtype, tile=1)
         )
     return dims
 
@@ -146,7 +144,7 @@ def _get_structured_header_dims(
 def _get_unstructured_data_dims(
     segy_file: SegyFile, tile_size: int
 ) -> Sequence[tiledb.Dim]:
-    num_samples = len(segy_file.samples)
+    samples = len(segy_file.samples)
     cell_size = segy_file.dtype.itemsize
     dtype = np.uint64
     return [
@@ -154,15 +152,13 @@ def _get_unstructured_data_dims(
             name="traces",
             domain=(0, segy_file.tracecount - 1),
             dtype=dtype,
-            tile=np.clip(
-                tile_size // (num_samples * cell_size), 1, segy_file.tracecount
-            ),
+            tile=np.clip(tile_size // (samples * cell_size), 1, segy_file.tracecount),
         ),
         tiledb.Dim(
             name="samples",
-            domain=(0, num_samples - 1),
+            domain=(0, samples - 1),
             dtype=dtype,
-            tile=np.clip(tile_size // cell_size, 1, num_samples),
+            tile=np.clip(tile_size // cell_size, 1, samples),
         ),
     ]
 
@@ -170,40 +166,36 @@ def _get_unstructured_data_dims(
 def _get_structured_data_dims(
     segy_file: SegyFile, tile_size: int
 ) -> Sequence[tiledb.Dim]:
-    num_samples = len(segy_file.samples)
     cell_size = segy_file.dtype.itemsize
-    ilines, xlines, offsets = segy_file.ilines, segy_file.xlines, segy_file.offsets
+    ilines, xlines, offsets, samples = map(
+        len, (segy_file.ilines, segy_file.xlines, segy_file.offsets, segy_file.samples)
+    )
     dtype = np.uintc
+
+    if segy_file.fast is segy_file.iline:
+        iline_tile = np.clip(tile_size // (xlines * samples * cell_size), 1, ilines)
+        xline_tile = xlines
+    else:
+        iline_tile = ilines
+        xline_tile = np.clip(tile_size // (ilines * samples * cell_size), 1, xlines)
+
     dims = [
         tiledb.Dim(
-            name="ilines",
-            domain=(0, len(ilines) - 1),
-            dtype=dtype,
-            tile=np.clip(
-                tile_size // (len(xlines) * num_samples * cell_size), 1, len(ilines),
-            ),
+            name="ilines", domain=(0, ilines - 1), dtype=dtype, tile=iline_tile,
         ),
         tiledb.Dim(
-            name="xlines",
-            domain=(0, len(xlines) - 1),
-            dtype=dtype,
-            tile=np.clip(
-                tile_size // (len(ilines) * num_samples * cell_size), 1, len(xlines),
-            ),
+            name="xlines", domain=(0, xlines - 1), dtype=dtype, tile=xline_tile,
         ),
         tiledb.Dim(
             name="samples",
-            domain=(0, num_samples - 1),
+            domain=(0, samples - 1),
             dtype=dtype,
-            tile=np.clip(tile_size // cell_size, 1, num_samples),
+            tile=np.clip(tile_size // cell_size, 1, samples),
         ),
     ]
-    if len(offsets) > 1:
+    if offsets > 1:
         dims.insert(
-            2,
-            tiledb.Dim(
-                name="offsets", domain=(0, len(offsets) - 1), dtype=dtype, tile=1
-            ),
+            2, tiledb.Dim(name="offsets", domain=(0, offsets - 1), dtype=dtype, tile=1),
         )
     return dims
 
@@ -237,11 +229,11 @@ def _fill_unstructured_trace_headers(
 def _fill_structured_trace_headers(
     tdb: tiledb.Array, segy_file: SegyFile, tile_size: int
 ) -> None:
-    ilines, xlines = segy_file.ilines, segy_file.xlines
+    ilines, xlines = map(len, (segy_file.ilines, segy_file.xlines))
     if segy_file.fast is segy_file.iline:
-        step = np.clip(tile_size // (len(xlines) * TRACE_FIELDS_SIZE), 1, len(ilines))
+        step = np.clip(tile_size // (xlines * TRACE_FIELDS_SIZE), 1, ilines)
     else:
-        step = np.clip(tile_size // (len(ilines) * TRACE_FIELDS_SIZE), 1, len(xlines))
+        step = np.clip(tile_size // (ilines * TRACE_FIELDS_SIZE), 1, xlines)
 
     if tdb.schema.domain.has_dim("offsets"):
         for i_offset, offset in enumerate(segy_file.offsets):
@@ -260,19 +252,19 @@ def _iter_subcube_headers(
     if segy_file.fast is segy_file.iline:
         fast_headers = segy_file.header.iline
         fast_lines = segy_file.ilines
-        slow_lines = segy_file.xlines
+        num_slow_lines = len(segy_file.xlines)
         axis = 0
     else:
         fast_headers = segy_file.header.xline
         fast_lines = segy_file.xlines
-        slow_lines = segy_file.ilines
+        num_slow_lines = len(segy_file.ilines)
         axis = 1
     if offset is None:
         offset = segy_file.fast.default_offset
     islice = xslice = slice(None, None)
     for fast_slice in _iter_slices(len(fast_lines), step):
         headers = [
-            np.zeros((fast_slice.stop - fast_slice.start, len(slow_lines)), dtype)
+            np.zeros((fast_slice.stop - fast_slice.start, num_slow_lines), dtype)
             for dtype in TRACE_FIELD_DTYPES
         ]
         for i, line_id in enumerate(fast_lines[fast_slice]):
@@ -305,9 +297,10 @@ def _fill_data(tdb: tiledb.Array, segy_file: SegyFile, tile_size: int) -> None:
 def _fill_unstructured_data(
     tdb: tiledb.Array, segy_file: SegyFile, tile_size: int
 ) -> None:
-    num_samples = len(segy_file.samples)
     dtype = segy_file.dtype
-    step = np.clip(tile_size // (num_samples * dtype.itemsize), 1, segy_file.tracecount)
+    step = np.clip(
+        tile_size // (len(segy_file.samples) * dtype.itemsize), 1, segy_file.tracecount
+    )
     for sl in _iter_slices(segy_file.tracecount, step):
         tdb[sl] = segy_file.trace.raw[sl]
 
@@ -315,17 +308,14 @@ def _fill_unstructured_data(
 def _fill_structured_data(
     tdb: tiledb.Array, segy_file: SegyFile, tile_size: int
 ) -> None:
-    num_samples = len(segy_file.samples)
     cell_size = segy_file.dtype.itemsize
-    ilines, xlines = segy_file.ilines, segy_file.xlines
+    ilines, xlines, samples = map(
+        len, (segy_file.ilines, segy_file.xlines, segy_file.samples)
+    )
     if segy_file.fast is segy_file.iline:
-        step = np.clip(
-            tile_size // (len(xlines) * num_samples * cell_size), 1, len(ilines),
-        )
+        step = np.clip(tile_size // (xlines * samples * cell_size), 1, ilines,)
     else:
-        step = np.clip(
-            tile_size // (len(ilines) * num_samples * cell_size), 1, len(xlines),
-        )
+        step = np.clip(tile_size // (ilines * samples * cell_size), 1, xlines,)
 
     if tdb.schema.domain.has_dim("offsets"):
         for i_offset, offset in enumerate(segy_file.offsets):
