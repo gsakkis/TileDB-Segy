@@ -40,44 +40,44 @@ TRACE_FIELD_FILTERS = (
 logger = logging.getLogger(__name__)
 
 
-def create(uri: str, segy_file: SegyFile, chunk_bytes: int) -> None:
+def create(uri: str, segy_file: SegyFile, tile_size: int) -> None:
     if tiledb.object_type(uri) != "group":
         tiledb.group_create(uri)
 
     headers_uri = os.path.join(uri, "headers")
     if tiledb.object_type(headers_uri) != "array":
-        _create_headers_array(headers_uri, segy_file, chunk_bytes)
+        _create_headers_array(headers_uri, segy_file, tile_size)
 
     data_uri = os.path.join(uri, "data")
     if tiledb.object_type(data_uri) != "array":
-        _create_data_array(data_uri, segy_file, chunk_bytes)
+        _create_data_array(data_uri, segy_file, tile_size)
 
 
-def _create_headers_array(uri: str, segy_file: SegyFile, chunk_bytes: int) -> None:
-    schema = _get_headers_schema(segy_file, chunk_bytes)
+def _create_headers_array(uri: str, segy_file: SegyFile, tile_size: int) -> None:
+    schema = _get_headers_schema(segy_file, tile_size)
     logger.info(f"header schema: {schema}")
     tiledb.DenseArray.create(uri, schema)
     with tiledb.DenseArray(uri, mode="w") as tdb:
-        _fill_headers(tdb, segy_file, chunk_bytes)
+        _fill_headers(tdb, segy_file, tile_size)
     tiledb.consolidate(uri)
     tiledb.vacuum(uri)
 
 
-def _create_data_array(uri: str, segy_file: SegyFile, chunk_bytes: int) -> None:
-    schema = _get_data_schema(segy_file, chunk_bytes)
+def _create_data_array(uri: str, segy_file: SegyFile, tile_size: int) -> None:
+    schema = _get_data_schema(segy_file, tile_size)
     logger.info(f"data schema: {schema}")
     tiledb.DenseArray.create(uri, schema)
     with tiledb.DenseArray(uri, mode="w") as tdb:
-        _fill_data(tdb, segy_file, chunk_bytes)
+        _fill_data(tdb, segy_file, tile_size)
     tiledb.consolidate(uri)
     tiledb.vacuum(uri)
 
 
-def _get_headers_schema(segy_file: SegyFile, chunk_bytes: int) -> tiledb.ArraySchema:
+def _get_headers_schema(segy_file: SegyFile, tile_size: int) -> tiledb.ArraySchema:
     if segy_file.unstructured:
-        dims = _get_unstructured_header_dims(segy_file, chunk_bytes)
+        dims = _get_unstructured_header_dims(segy_file, tile_size)
     else:
-        dims = _get_structured_header_dims(segy_file, chunk_bytes)
+        dims = _get_structured_header_dims(segy_file, tile_size)
     return tiledb.ArraySchema(
         domain=tiledb.Domain(*dims),
         attrs=[
@@ -87,18 +87,18 @@ def _get_headers_schema(segy_file: SegyFile, chunk_bytes: int) -> tiledb.ArraySc
     )
 
 
-def _get_data_schema(segy_file: SegyFile, chunk_bytes: int) -> tiledb.ArraySchema:
+def _get_data_schema(segy_file: SegyFile, tile_size: int) -> tiledb.ArraySchema:
     if segy_file.unstructured:
-        dims = _get_unstructured_data_dims(segy_file, chunk_bytes)
+        dims = _get_unstructured_data_dims(segy_file, tile_size)
     else:
-        dims = _get_structured_data_dims(segy_file, chunk_bytes)
+        dims = _get_structured_data_dims(segy_file, tile_size)
     return tiledb.ArraySchema(
         domain=tiledb.Domain(*dims), attrs=[tiledb.Attr(dtype=segy_file.dtype)]
     )
 
 
 def _get_unstructured_header_dims(
-    segy_file: SegyFile, chunk_bytes: int
+    segy_file: SegyFile, tile_size: int
 ) -> Sequence[tiledb.Dim]:
     domain = (0, segy_file.tracecount - 1)
     return [
@@ -106,13 +106,13 @@ def _get_unstructured_header_dims(
             name="traces",
             domain=domain,
             dtype=np.uint64,
-            tile=np.clip(chunk_bytes // TRACE_FIELDS_SIZE, 1, segy_file.tracecount),
+            tile=np.clip(tile_size // TRACE_FIELDS_SIZE, 1, segy_file.tracecount),
         ),
     ]
 
 
 def _get_structured_header_dims(
-    segy_file: SegyFile, chunk_bytes: int
+    segy_file: SegyFile, tile_size: int
 ) -> Sequence[tiledb.Dim]:
     ilines, xlines, offsets = segy_file.ilines, segy_file.xlines, segy_file.offsets
     dtype = np.uintc
@@ -122,7 +122,7 @@ def _get_structured_header_dims(
             domain=(0, len(ilines) - 1),
             dtype=dtype,
             tile=np.clip(
-                chunk_bytes // (len(xlines) * TRACE_FIELDS_SIZE), 1, len(ilines),
+                tile_size // (len(xlines) * TRACE_FIELDS_SIZE), 1, len(ilines),
             ),
         ),
         tiledb.Dim(
@@ -130,7 +130,7 @@ def _get_structured_header_dims(
             domain=(0, len(xlines) - 1),
             dtype=dtype,
             tile=np.clip(
-                chunk_bytes // (len(ilines) * TRACE_FIELDS_SIZE), 1, len(xlines),
+                tile_size // (len(ilines) * TRACE_FIELDS_SIZE), 1, len(xlines),
             ),
         ),
     ]
@@ -144,7 +144,7 @@ def _get_structured_header_dims(
 
 
 def _get_unstructured_data_dims(
-    segy_file: SegyFile, chunk_bytes: int
+    segy_file: SegyFile, tile_size: int
 ) -> Sequence[tiledb.Dim]:
     num_samples = len(segy_file.samples)
     cell_size = segy_file.dtype.itemsize
@@ -155,20 +155,20 @@ def _get_unstructured_data_dims(
             domain=(0, segy_file.tracecount - 1),
             dtype=dtype,
             tile=np.clip(
-                chunk_bytes // (num_samples * cell_size), 1, segy_file.tracecount
+                tile_size // (num_samples * cell_size), 1, segy_file.tracecount
             ),
         ),
         tiledb.Dim(
             name="samples",
             domain=(0, num_samples - 1),
             dtype=dtype,
-            tile=np.clip(chunk_bytes // cell_size, 1, num_samples),
+            tile=np.clip(tile_size // cell_size, 1, num_samples),
         ),
     ]
 
 
 def _get_structured_data_dims(
-    segy_file: SegyFile, chunk_bytes: int
+    segy_file: SegyFile, tile_size: int
 ) -> Sequence[tiledb.Dim]:
     num_samples = len(segy_file.samples)
     cell_size = segy_file.dtype.itemsize
@@ -180,7 +180,7 @@ def _get_structured_data_dims(
             domain=(0, len(ilines) - 1),
             dtype=dtype,
             tile=np.clip(
-                chunk_bytes // (len(xlines) * num_samples * cell_size), 1, len(ilines),
+                tile_size // (len(xlines) * num_samples * cell_size), 1, len(ilines),
             ),
         ),
         tiledb.Dim(
@@ -188,14 +188,14 @@ def _get_structured_data_dims(
             domain=(0, len(xlines) - 1),
             dtype=dtype,
             tile=np.clip(
-                chunk_bytes // (len(ilines) * num_samples * cell_size), 1, len(xlines),
+                tile_size // (len(ilines) * num_samples * cell_size), 1, len(xlines),
             ),
         ),
         tiledb.Dim(
             name="samples",
             domain=(0, num_samples - 1),
             dtype=dtype,
-            tile=np.clip(chunk_bytes // cell_size, 1, num_samples),
+            tile=np.clip(tile_size // cell_size, 1, num_samples),
         ),
     ]
     if len(offsets) > 1:
@@ -208,21 +208,21 @@ def _get_structured_data_dims(
     return dims
 
 
-def _fill_headers(tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: int) -> None:
+def _fill_headers(tdb: tiledb.Array, segy_file: SegyFile, tile_size: int) -> None:
     for i, text in enumerate(segy_file.text):
         tdb.meta[f"text_{i}"] = bytes(text)
     for k, v in segy_file.bin.items():
         tdb.meta[f"bin_{k}"] = v
     if segy_file.unstructured:
-        _fill_unstructured_trace_headers(tdb, segy_file, chunk_bytes)
+        _fill_unstructured_trace_headers(tdb, segy_file, tile_size)
     else:
-        _fill_structured_trace_headers(tdb, segy_file, chunk_bytes)
+        _fill_structured_trace_headers(tdb, segy_file, tile_size)
 
 
 def _fill_unstructured_trace_headers(
-    tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: int
+    tdb: tiledb.Array, segy_file: SegyFile, tile_size: int
 ) -> None:
-    step = np.clip(chunk_bytes // TRACE_FIELDS_SIZE, 1, segy_file.tracecount)
+    step = np.clip(tile_size // TRACE_FIELDS_SIZE, 1, segy_file.tracecount)
     for sl in _iter_slices(segy_file.tracecount, step):
         headers = [np.zeros(sl.stop - sl.start, dtype) for dtype in TRACE_FIELD_DTYPES]
         for i, field in enumerate(segy_file.header[sl]):
@@ -235,17 +235,13 @@ def _fill_unstructured_trace_headers(
 
 
 def _fill_structured_trace_headers(
-    tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: int
+    tdb: tiledb.Array, segy_file: SegyFile, tile_size: int
 ) -> None:
     ilines, xlines = segy_file.ilines, segy_file.xlines
     if segy_file.fast is segy_file.iline:
-        step = np.clip(
-            chunk_bytes // (len(xlines) * TRACE_FIELDS_SIZE), 1, len(ilines),
-        )
+        step = np.clip(tile_size // (len(xlines) * TRACE_FIELDS_SIZE), 1, len(ilines))
     else:
-        step = np.clip(
-            chunk_bytes // (len(ilines) * TRACE_FIELDS_SIZE), 1, len(xlines),
-        )
+        step = np.clip(tile_size // (len(ilines) * TRACE_FIELDS_SIZE), 1, len(xlines))
 
     if tdb.schema.domain.has_dim("offsets"):
         for i_offset, offset in enumerate(segy_file.offsets):
@@ -294,43 +290,41 @@ def _iter_subcube_headers(
         yield islice, xslice, dict(zip(TRACE_FIELD_NAMES, headers))
 
 
-def _fill_data(tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: int) -> None:
+def _fill_data(tdb: tiledb.Array, segy_file: SegyFile, tile_size: int) -> None:
     tdb.meta["samples"] = segy_file.samples.tolist()
     if segy_file.unstructured:
-        _fill_unstructured_data(tdb, segy_file, chunk_bytes)
+        _fill_unstructured_data(tdb, segy_file, tile_size)
     else:
         tdb.meta["ilines"] = segy_file.ilines.tolist()
         tdb.meta["xlines"] = segy_file.xlines.tolist()
         if tdb.schema.domain.has_dim("offsets"):
             tdb.meta["offsets"] = segy_file.offsets.tolist()
-        _fill_structured_data(tdb, segy_file, chunk_bytes)
+        _fill_structured_data(tdb, segy_file, tile_size)
 
 
 def _fill_unstructured_data(
-    tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: int
+    tdb: tiledb.Array, segy_file: SegyFile, tile_size: int
 ) -> None:
     num_samples = len(segy_file.samples)
     dtype = segy_file.dtype
-    step = np.clip(
-        chunk_bytes // (num_samples * dtype.itemsize), 1, segy_file.tracecount
-    )
+    step = np.clip(tile_size // (num_samples * dtype.itemsize), 1, segy_file.tracecount)
     for sl in _iter_slices(segy_file.tracecount, step):
         tdb[sl] = segy_file.trace.raw[sl]
 
 
 def _fill_structured_data(
-    tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: int
+    tdb: tiledb.Array, segy_file: SegyFile, tile_size: int
 ) -> None:
     num_samples = len(segy_file.samples)
     cell_size = segy_file.dtype.itemsize
     ilines, xlines = segy_file.ilines, segy_file.xlines
     if segy_file.fast is segy_file.iline:
         step = np.clip(
-            chunk_bytes // (len(xlines) * num_samples * cell_size), 1, len(ilines),
+            tile_size // (len(xlines) * num_samples * cell_size), 1, len(ilines),
         )
     else:
         step = np.clip(
-            chunk_bytes // (len(ilines) * num_samples * cell_size), 1, len(xlines),
+            tile_size // (len(ilines) * num_samples * cell_size), 1, len(xlines),
         )
 
     if tdb.schema.domain.has_dim("offsets"):
