@@ -41,7 +41,7 @@ MAX_TILESIZE = 2 ** 16
 logger = logging.getLogger(__name__)
 
 
-def create(uri: str, segy_file: SegyFile, chunk_bytes: Optional[int] = None) -> None:
+def create(uri: str, segy_file: SegyFile, chunk_bytes: int) -> None:
     if tiledb.object_type(uri) != "group":
         tiledb.group_create(uri)
 
@@ -54,9 +54,7 @@ def create(uri: str, segy_file: SegyFile, chunk_bytes: Optional[int] = None) -> 
         _create_data_array(data_uri, segy_file, chunk_bytes)
 
 
-def _create_headers_array(
-    uri: str, segy_file: SegyFile, chunk_bytes: Optional[int] = None
-) -> None:
+def _create_headers_array(uri: str, segy_file: SegyFile, chunk_bytes: int) -> None:
     schema = _get_headers_schema(segy_file)
     logger.info(f"header schema: {schema}")
     tiledb.DenseArray.create(uri, schema)
@@ -66,9 +64,7 @@ def _create_headers_array(
     tiledb.vacuum(uri)
 
 
-def _create_data_array(
-    uri: str, segy_file: SegyFile, chunk_bytes: Optional[int] = None
-) -> None:
+def _create_data_array(uri: str, segy_file: SegyFile, chunk_bytes: int) -> None:
     schema = _get_data_schema(segy_file)
     logger.info(f"data schema: {schema}")
     tiledb.DenseArray.create(uri, schema)
@@ -205,9 +201,7 @@ def _get_structured_data_dims(segy_file: SegyFile) -> Sequence[tiledb.Dim]:
     return dims
 
 
-def _fill_headers(
-    tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: Optional[int] = None
-) -> None:
+def _fill_headers(tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: int) -> None:
     for i, text in enumerate(segy_file.text):
         tdb.meta[f"text_{i}"] = bytes(text)
     for k, v in segy_file.bin.items():
@@ -219,12 +213,9 @@ def _fill_headers(
 
 
 def _fill_unstructured_trace_headers(
-    tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: Optional[int] = None
+    tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: int
 ) -> None:
-    if chunk_bytes is not None:
-        step = np.clip(chunk_bytes // TRACE_FIELDS_SIZE, 1, segy_file.tracecount)
-    else:
-        step = segy_file.tracecount
+    step = np.clip(chunk_bytes // TRACE_FIELDS_SIZE, 1, segy_file.tracecount)
     for sl in _iter_slices(segy_file.tracecount, step):
         headers = [np.zeros(sl.stop - sl.start, dtype) for dtype in TRACE_FIELD_DTYPES]
         for i, field in enumerate(segy_file.header[sl]):
@@ -237,23 +228,17 @@ def _fill_unstructured_trace_headers(
 
 
 def _fill_structured_trace_headers(
-    tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: Optional[int] = None
+    tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: int
 ) -> None:
     ilines, xlines = segy_file.ilines, segy_file.xlines
     if segy_file.fast is segy_file.iline:
-        if chunk_bytes is not None:
-            step = np.clip(
-                chunk_bytes // (len(xlines) * TRACE_FIELDS_SIZE), 1, len(ilines),
-            )
-        else:
-            step = len(ilines)
+        step = np.clip(
+            chunk_bytes // (len(xlines) * TRACE_FIELDS_SIZE), 1, len(ilines),
+        )
     else:
-        if chunk_bytes is not None:
-            step = np.clip(
-                chunk_bytes // (len(ilines) * TRACE_FIELDS_SIZE), 1, len(xlines),
-            )
-        else:
-            step = len(xlines)
+        step = np.clip(
+            chunk_bytes // (len(ilines) * TRACE_FIELDS_SIZE), 1, len(xlines),
+        )
 
     if tdb.schema.domain.has_dim("offsets"):
         for i_offset, offset in enumerate(segy_file.offsets):
@@ -302,9 +287,7 @@ def _iter_subcube_headers(
         yield islice, xslice, dict(zip(TRACE_FIELD_NAMES, headers))
 
 
-def _fill_data(
-    tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: Optional[int] = None
-) -> None:
+def _fill_data(tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: int) -> None:
     tdb.meta["samples"] = segy_file.samples.tolist()
     if segy_file.unstructured:
         _fill_unstructured_data(tdb, segy_file, chunk_bytes)
@@ -317,40 +300,31 @@ def _fill_data(
 
 
 def _fill_unstructured_data(
-    tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: Optional[int] = None
+    tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: int
 ) -> None:
     num_samples = len(segy_file.samples)
     dtype = segy_file.dtype
-    if chunk_bytes is not None:
-        step = np.clip(
-            chunk_bytes // (num_samples * dtype.itemsize), 1, segy_file.tracecount
-        )
-    else:
-        step = segy_file.tracecount
+    step = np.clip(
+        chunk_bytes // (num_samples * dtype.itemsize), 1, segy_file.tracecount
+    )
     for sl in _iter_slices(segy_file.tracecount, step):
         tdb[sl] = segy_file.trace.raw[sl]
 
 
 def _fill_structured_data(
-    tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: Optional[int] = None
+    tdb: tiledb.Array, segy_file: SegyFile, chunk_bytes: int
 ) -> None:
     num_samples = len(segy_file.samples)
     cell_size = segy_file.dtype.itemsize
     ilines, xlines = segy_file.ilines, segy_file.xlines
     if segy_file.fast is segy_file.iline:
-        if chunk_bytes is not None:
-            step = np.clip(
-                chunk_bytes // (len(xlines) * num_samples * cell_size), 1, len(ilines),
-            )
-        else:
-            step = len(ilines)
+        step = np.clip(
+            chunk_bytes // (len(xlines) * num_samples * cell_size), 1, len(ilines),
+        )
     else:
-        if chunk_bytes is not None:
-            step = np.clip(
-                chunk_bytes // (len(ilines) * num_samples * cell_size), 1, len(xlines),
-            )
-        else:
-            step = len(xlines)
+        step = np.clip(
+            chunk_bytes // (len(ilines) * num_samples * cell_size), 1, len(xlines),
+        )
 
     if tdb.schema.domain.has_dim("offsets"):
         for i_offset, offset in enumerate(segy_file.offsets):
@@ -398,4 +372,4 @@ if __name__ == "__main__":
 
     segy_file, output_dir, ignore_geometry = sys.argv[1:]
     with segyio.open(segy_file, ignore_geometry=int(ignore_geometry)) as segy_file:
-        create(output_dir, segy_file)
+        create(output_dir, segy_file, 4 * 1024 ** 2)
