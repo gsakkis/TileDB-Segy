@@ -108,7 +108,7 @@ def _get_unstructured_header_dims(segy_file: SegyFile) -> Sequence[tiledb.Dim]:
         tiledb.Dim(
             name="traces",
             domain=domain,
-            dtype=_find_shortest_dtype(domain),
+            dtype=np.uint64,
             tile=np.clip(MAX_TILESIZE // TRACE_FIELDS_SIZE, 1, segy_file.tracecount),
         ),
     ]
@@ -116,14 +116,11 @@ def _get_unstructured_header_dims(segy_file: SegyFile) -> Sequence[tiledb.Dim]:
 
 def _get_structured_header_dims(segy_file: SegyFile) -> Sequence[tiledb.Dim]:
     ilines, xlines, offsets = segy_file.ilines, segy_file.xlines, segy_file.offsets
-    domains = [(0, len(ilines) - 1), (0, len(xlines) - 1)]
-    if len(offsets) > 1:
-        domains.append((0, len(offsets) - 1))
-    dtype = _find_shortest_dtype(sum(domains, ()))
+    dtype = np.uintc
     dims = [
         tiledb.Dim(
             name="ilines",
-            domain=domains[0],
+            domain=(0, len(ilines) - 1),
             dtype=dtype,
             tile=np.clip(
                 MAX_TILESIZE // (len(xlines) * TRACE_FIELDS_SIZE), 1, len(ilines),
@@ -131,27 +128,30 @@ def _get_structured_header_dims(segy_file: SegyFile) -> Sequence[tiledb.Dim]:
         ),
         tiledb.Dim(
             name="xlines",
-            domain=domains[1],
+            domain=(0, len(xlines) - 1),
             dtype=dtype,
             tile=np.clip(
                 MAX_TILESIZE // (len(ilines) * TRACE_FIELDS_SIZE), 1, len(xlines),
             ),
         ),
     ]
-    if len(domains) == 3:
-        dims.append(tiledb.Dim(name="offsets", domain=domains[2], dtype=dtype, tile=1))
+    if len(offsets) > 1:
+        dims.append(
+            tiledb.Dim(
+                name="offsets", domain=(0, len(offsets) - 1), dtype=dtype, tile=1
+            )
+        )
     return dims
 
 
 def _get_unstructured_data_dims(segy_file: SegyFile) -> Sequence[tiledb.Dim]:
     num_samples = len(segy_file.samples)
     cell_size = segy_file.dtype.itemsize
-    domains = [(0, segy_file.tracecount - 1), (0, num_samples - 1)]
-    dtype = _find_shortest_dtype(sum(domains, ()))
+    dtype = np.uint64
     return [
         tiledb.Dim(
             name="traces",
-            domain=domains[0],
+            domain=(0, segy_file.tracecount - 1),
             dtype=dtype,
             tile=np.clip(
                 MAX_TILESIZE // (num_samples * cell_size), 1, segy_file.tracecount
@@ -159,7 +159,7 @@ def _get_unstructured_data_dims(segy_file: SegyFile) -> Sequence[tiledb.Dim]:
         ),
         tiledb.Dim(
             name="samples",
-            domain=domains[1],
+            domain=(0, num_samples - 1),
             dtype=dtype,
             tile=np.clip(MAX_TILESIZE // cell_size, 1, num_samples),
         ),
@@ -170,14 +170,11 @@ def _get_structured_data_dims(segy_file: SegyFile) -> Sequence[tiledb.Dim]:
     num_samples = len(segy_file.samples)
     cell_size = segy_file.dtype.itemsize
     ilines, xlines, offsets = segy_file.ilines, segy_file.xlines, segy_file.offsets
-    domains = [(0, len(ilines) - 1), (0, len(xlines) - 1), (0, num_samples - 1)]
-    if len(offsets) > 1:
-        domains.append((0, len(offsets) - 1))
-    dtype = _find_shortest_dtype(sum(domains, ()))
+    dtype = np.uintc
     dims = [
         tiledb.Dim(
             name="ilines",
-            domain=domains[0],
+            domain=(0, len(ilines) - 1),
             dtype=dtype,
             tile=np.clip(
                 MAX_TILESIZE // (len(xlines) * num_samples * cell_size), 1, len(ilines),
@@ -185,7 +182,7 @@ def _get_structured_data_dims(segy_file: SegyFile) -> Sequence[tiledb.Dim]:
         ),
         tiledb.Dim(
             name="xlines",
-            domain=domains[1],
+            domain=(0, len(xlines) - 1),
             dtype=dtype,
             tile=np.clip(
                 MAX_TILESIZE // (len(ilines) * num_samples * cell_size), 1, len(xlines),
@@ -193,14 +190,17 @@ def _get_structured_data_dims(segy_file: SegyFile) -> Sequence[tiledb.Dim]:
         ),
         tiledb.Dim(
             name="samples",
-            domain=domains[2],
+            domain=(0, num_samples - 1),
             dtype=dtype,
             tile=np.clip(MAX_TILESIZE // cell_size, 1, num_samples),
         ),
     ]
-    if len(domains) == 4:
+    if len(offsets) > 1:
         dims.insert(
-            2, tiledb.Dim(name="offsets", domain=domains[3], dtype=dtype, tile=1)
+            2,
+            tiledb.Dim(
+                name="offsets", domain=(0, len(offsets) - 1), dtype=dtype, tile=1
+            ),
         )
     return dims
 
@@ -383,24 +383,6 @@ def _iter_subcubes(
         else:
             xslice = fast_slice
         yield islice, xslice, subcube
-
-
-def _find_shortest_dtype(values: Collection[Number]) -> np.dtype:
-    min_value = min(values)
-    max_value = max(values)
-    for dt in (
-        np.uint8,
-        np.int8,
-        np.uint16,
-        np.int16,
-        np.uint32,
-        np.int32,
-        np.uint64,
-        np.int64,
-    ):
-        info = np.iinfo(dt)
-        if info.min <= min_value <= max_value <= info.max:
-            return dt
 
 
 def _iter_slices(size: int, step: int) -> Iterator[slice]:
