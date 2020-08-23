@@ -36,7 +36,6 @@ TRACE_FIELD_FILTERS = (
     tiledb.ByteShuffleFilter(),
     tiledb.LZ4Filter(),
 )
-MAX_TILESIZE = 2 ** 16
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +54,7 @@ def create(uri: str, segy_file: SegyFile, chunk_bytes: int) -> None:
 
 
 def _create_headers_array(uri: str, segy_file: SegyFile, chunk_bytes: int) -> None:
-    schema = _get_headers_schema(segy_file)
+    schema = _get_headers_schema(segy_file, chunk_bytes)
     logger.info(f"header schema: {schema}")
     tiledb.DenseArray.create(uri, schema)
     with tiledb.DenseArray(uri, mode="w") as tdb:
@@ -65,7 +64,7 @@ def _create_headers_array(uri: str, segy_file: SegyFile, chunk_bytes: int) -> No
 
 
 def _create_data_array(uri: str, segy_file: SegyFile, chunk_bytes: int) -> None:
-    schema = _get_data_schema(segy_file)
+    schema = _get_data_schema(segy_file, chunk_bytes)
     logger.info(f"data schema: {schema}")
     tiledb.DenseArray.create(uri, schema)
     with tiledb.DenseArray(uri, mode="w") as tdb:
@@ -74,11 +73,11 @@ def _create_data_array(uri: str, segy_file: SegyFile, chunk_bytes: int) -> None:
     tiledb.vacuum(uri)
 
 
-def _get_headers_schema(segy_file: SegyFile) -> tiledb.ArraySchema:
+def _get_headers_schema(segy_file: SegyFile, chunk_bytes: int) -> tiledb.ArraySchema:
     if segy_file.unstructured:
-        dims = _get_unstructured_header_dims(segy_file)
+        dims = _get_unstructured_header_dims(segy_file, chunk_bytes)
     else:
-        dims = _get_structured_header_dims(segy_file)
+        dims = _get_structured_header_dims(segy_file, chunk_bytes)
     return tiledb.ArraySchema(
         domain=tiledb.Domain(*dims),
         attrs=[
@@ -88,29 +87,33 @@ def _get_headers_schema(segy_file: SegyFile) -> tiledb.ArraySchema:
     )
 
 
-def _get_data_schema(segy_file: SegyFile) -> tiledb.ArraySchema:
+def _get_data_schema(segy_file: SegyFile, chunk_bytes: int) -> tiledb.ArraySchema:
     if segy_file.unstructured:
-        dims = _get_unstructured_data_dims(segy_file)
+        dims = _get_unstructured_data_dims(segy_file, chunk_bytes)
     else:
-        dims = _get_structured_data_dims(segy_file)
+        dims = _get_structured_data_dims(segy_file, chunk_bytes)
     return tiledb.ArraySchema(
         domain=tiledb.Domain(*dims), attrs=[tiledb.Attr(dtype=segy_file.dtype)]
     )
 
 
-def _get_unstructured_header_dims(segy_file: SegyFile) -> Sequence[tiledb.Dim]:
+def _get_unstructured_header_dims(
+    segy_file: SegyFile, chunk_bytes: int
+) -> Sequence[tiledb.Dim]:
     domain = (0, segy_file.tracecount - 1)
     return [
         tiledb.Dim(
             name="traces",
             domain=domain,
             dtype=np.uint64,
-            tile=np.clip(MAX_TILESIZE // TRACE_FIELDS_SIZE, 1, segy_file.tracecount),
+            tile=np.clip(chunk_bytes // TRACE_FIELDS_SIZE, 1, segy_file.tracecount),
         ),
     ]
 
 
-def _get_structured_header_dims(segy_file: SegyFile) -> Sequence[tiledb.Dim]:
+def _get_structured_header_dims(
+    segy_file: SegyFile, chunk_bytes: int
+) -> Sequence[tiledb.Dim]:
     ilines, xlines, offsets = segy_file.ilines, segy_file.xlines, segy_file.offsets
     dtype = np.uintc
     dims = [
@@ -119,7 +122,7 @@ def _get_structured_header_dims(segy_file: SegyFile) -> Sequence[tiledb.Dim]:
             domain=(0, len(ilines) - 1),
             dtype=dtype,
             tile=np.clip(
-                MAX_TILESIZE // (len(xlines) * TRACE_FIELDS_SIZE), 1, len(ilines),
+                chunk_bytes // (len(xlines) * TRACE_FIELDS_SIZE), 1, len(ilines),
             ),
         ),
         tiledb.Dim(
@@ -127,7 +130,7 @@ def _get_structured_header_dims(segy_file: SegyFile) -> Sequence[tiledb.Dim]:
             domain=(0, len(xlines) - 1),
             dtype=dtype,
             tile=np.clip(
-                MAX_TILESIZE // (len(ilines) * TRACE_FIELDS_SIZE), 1, len(xlines),
+                chunk_bytes // (len(ilines) * TRACE_FIELDS_SIZE), 1, len(xlines),
             ),
         ),
     ]
@@ -140,7 +143,9 @@ def _get_structured_header_dims(segy_file: SegyFile) -> Sequence[tiledb.Dim]:
     return dims
 
 
-def _get_unstructured_data_dims(segy_file: SegyFile) -> Sequence[tiledb.Dim]:
+def _get_unstructured_data_dims(
+    segy_file: SegyFile, chunk_bytes: int
+) -> Sequence[tiledb.Dim]:
     num_samples = len(segy_file.samples)
     cell_size = segy_file.dtype.itemsize
     dtype = np.uint64
@@ -150,19 +155,21 @@ def _get_unstructured_data_dims(segy_file: SegyFile) -> Sequence[tiledb.Dim]:
             domain=(0, segy_file.tracecount - 1),
             dtype=dtype,
             tile=np.clip(
-                MAX_TILESIZE // (num_samples * cell_size), 1, segy_file.tracecount
+                chunk_bytes // (num_samples * cell_size), 1, segy_file.tracecount
             ),
         ),
         tiledb.Dim(
             name="samples",
             domain=(0, num_samples - 1),
             dtype=dtype,
-            tile=np.clip(MAX_TILESIZE // cell_size, 1, num_samples),
+            tile=np.clip(chunk_bytes // cell_size, 1, num_samples),
         ),
     ]
 
 
-def _get_structured_data_dims(segy_file: SegyFile) -> Sequence[tiledb.Dim]:
+def _get_structured_data_dims(
+    segy_file: SegyFile, chunk_bytes: int
+) -> Sequence[tiledb.Dim]:
     num_samples = len(segy_file.samples)
     cell_size = segy_file.dtype.itemsize
     ilines, xlines, offsets = segy_file.ilines, segy_file.xlines, segy_file.offsets
@@ -173,7 +180,7 @@ def _get_structured_data_dims(segy_file: SegyFile) -> Sequence[tiledb.Dim]:
             domain=(0, len(ilines) - 1),
             dtype=dtype,
             tile=np.clip(
-                MAX_TILESIZE // (len(xlines) * num_samples * cell_size), 1, len(ilines),
+                chunk_bytes // (len(xlines) * num_samples * cell_size), 1, len(ilines),
             ),
         ),
         tiledb.Dim(
@@ -181,14 +188,14 @@ def _get_structured_data_dims(segy_file: SegyFile) -> Sequence[tiledb.Dim]:
             domain=(0, len(xlines) - 1),
             dtype=dtype,
             tile=np.clip(
-                MAX_TILESIZE // (len(ilines) * num_samples * cell_size), 1, len(xlines),
+                chunk_bytes // (len(ilines) * num_samples * cell_size), 1, len(xlines),
             ),
         ),
         tiledb.Dim(
             name="samples",
             domain=(0, num_samples - 1),
             dtype=dtype,
-            tile=np.clip(MAX_TILESIZE // cell_size, 1, num_samples),
+            tile=np.clip(chunk_bytes // cell_size, 1, num_samples),
         ),
     ]
     if len(offsets) > 1:
