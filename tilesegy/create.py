@@ -201,10 +201,9 @@ def _get_structured_data_dims(
 
 
 def _fill_headers(tdb: tiledb.Array, segy_file: SegyFile, tile_size: int) -> None:
-    for i, text in enumerate(segy_file.text):
-        tdb.meta[f"text_{i}"] = bytes(text)
+    tdb.meta["__text__"] = b"".join(segy_file.text)
     for k, v in segy_file.bin.items():
-        tdb.meta[f"bin_{k}"] = v
+        tdb.meta[str(k)] = v
     if segy_file.unstructured:
         _fill_unstructured_trace_headers(tdb, segy_file, tile_size)
     else:
