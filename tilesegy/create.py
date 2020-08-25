@@ -5,7 +5,7 @@ from typing import Collection, Iterator, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import tiledb
-from segyio import SegyFile, TraceField
+from segyio import SegyFile, TraceField, TraceSortingFormat
 from segyio.field import Field
 
 Number = Union[int, float, np.number]
@@ -119,7 +119,7 @@ def _get_structured_header_dims(
     )
     dtype = np.uintc
 
-    if segy_file.fast is segy_file.iline:
+    if segy_file.sorting == TraceSortingFormat.INLINE_SORTING:
         iline_tile = np.clip(tile_size // (xlines * TRACE_FIELDS_SIZE), 1, ilines)
         xline_tile = xlines
     else:
@@ -172,7 +172,7 @@ def _get_structured_data_dims(
     )
     dtype = np.uintc
 
-    if segy_file.fast is segy_file.iline:
+    if segy_file.sorting == TraceSortingFormat.INLINE_SORTING:
         iline_tile = np.clip(tile_size // (xlines * samples * cell_size), 1, ilines)
         xline_tile = xlines
     else:
@@ -229,7 +229,7 @@ def _fill_structured_trace_headers(
     tdb: tiledb.Array, segy_file: SegyFile, tile_size: int
 ) -> None:
     ilines, xlines = map(len, (segy_file.ilines, segy_file.xlines))
-    if segy_file.fast is segy_file.iline:
+    if segy_file.sorting == TraceSortingFormat.INLINE_SORTING:
         step = np.clip(tile_size // (xlines * TRACE_FIELDS_SIZE), 1, ilines)
     else:
         step = np.clip(tile_size // (ilines * TRACE_FIELDS_SIZE), 1, xlines)
@@ -248,7 +248,7 @@ def _fill_structured_trace_headers(
 def _iter_subcube_headers(
     segy_file: SegyFile, step: int, offset: Optional[int] = None
 ) -> Iterator[Tuple[slice, slice, np.ndarray]]:
-    if segy_file.fast is segy_file.iline:
+    if segy_file.sorting == TraceSortingFormat.INLINE_SORTING:
         fast_headers = segy_file.header.iline
         fast_lines = segy_file.ilines
         num_slow_lines = len(segy_file.xlines)
@@ -311,7 +311,7 @@ def _fill_structured_data(
     ilines, xlines, samples = map(
         len, (segy_file.ilines, segy_file.xlines, segy_file.samples)
     )
-    if segy_file.fast is segy_file.iline:
+    if segy_file.sorting == TraceSortingFormat.INLINE_SORTING:
         step = np.clip(tile_size // (xlines * samples * cell_size), 1, ilines,)
     else:
         step = np.clip(tile_size // (ilines * samples * cell_size), 1, xlines,)
@@ -328,13 +328,13 @@ def _fill_structured_data(
 def _iter_subcubes(
     segy_file: SegyFile, step: int, offset: Optional[int] = None
 ) -> Iterator[Tuple[slice, slice, np.ndarray]]:
-    fast_line = segy_file.fast
-    if fast_line is segy_file.iline:
+    if segy_file.sorting == TraceSortingFormat.INLINE_SORTING:
         fast_lines = segy_file.ilines
         axis = 0
     else:
         fast_lines = segy_file.xlines
         axis = 1
+    fast_line = segy_file.fast
     if offset is None:
         offset = fast_line.default_offset
     islice = xslice = slice(None, None)
@@ -356,10 +356,14 @@ def _iter_slices(size: int, step: int) -> Iterator[slice]:
 
 
 if __name__ == "__main__":
+    import shutil
     import sys
 
     import segyio
 
-    segy_file, output_dir, ignore_geometry = sys.argv[1:]
-    with segyio.open(segy_file, ignore_geometry=int(ignore_geometry)) as segy_file:
+    segy_file, output_dir = sys.argv[1:]
+    if os.path.isdir(output_dir):
+        shutil.rmtree(output_dir)
+
+    with segyio.open(segy_file, strict=False) as segy_file:
         create(output_dir, segy_file, 4 * 1024 ** 2)
