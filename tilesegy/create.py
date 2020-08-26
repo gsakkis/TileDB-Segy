@@ -1,14 +1,14 @@
-import logging
 import os
+from abc import ABC, abstractmethod
 from collections import namedtuple
-from typing import Collection, Iterator, Optional, Sequence, Tuple, Union
+from contextlib import contextmanager
+from typing import Collection, Iterable, Iterator, Optional, Tuple, Type, Union
 
 import numpy as np
 import tiledb
 from segyio import SegyFile, TraceField, TraceSortingFormat
 from segyio.field import Field
 
-Number = Union[int, float, np.number]
 TypedTraceField = namedtuple("TypedTraceField", ["name", "enum", "dtype"])
 
 
@@ -37,325 +37,344 @@ TRACE_FIELD_FILTERS = (
     tiledb.LZ4Filter(),
 )
 
-logger = logging.getLogger(__name__)
 
-
-def create(uri: str, segy_file: SegyFile, tile_size: int) -> None:
-    if tiledb.object_type(uri) != "group":
-        tiledb.group_create(uri)
-
-    headers_uri = os.path.join(uri, "headers")
-    if tiledb.object_type(headers_uri) != "array":
-        _create_headers_array(headers_uri, segy_file, tile_size)
-
-    data_uri = os.path.join(uri, "data")
-    if tiledb.object_type(data_uri) != "array":
-        _create_data_array(data_uri, segy_file, tile_size)
-
-
-def _create_headers_array(uri: str, segy_file: SegyFile, tile_size: int) -> None:
-    schema = _get_headers_schema(segy_file, tile_size)
-    logger.info(f"header schema: {schema}")
-    tiledb.DenseArray.create(uri, schema)
-    with tiledb.DenseArray(uri, mode="w") as tdb:
-        _fill_headers(tdb, segy_file, tile_size)
-    tiledb.consolidate(uri)
-    tiledb.vacuum(uri)
-
-
-def _create_data_array(uri: str, segy_file: SegyFile, tile_size: int) -> None:
-    schema = _get_data_schema(segy_file, tile_size)
-    logger.info(f"data schema: {schema}")
-    tiledb.DenseArray.create(uri, schema)
-    with tiledb.DenseArray(uri, mode="w") as tdb:
-        _fill_data(tdb, segy_file, tile_size)
-    tiledb.consolidate(uri)
-    tiledb.vacuum(uri)
-
-
-def _get_headers_schema(segy_file: SegyFile, tile_size: int) -> tiledb.ArraySchema:
-    if segy_file.unstructured:
-        dims = _get_unstructured_header_dims(segy_file, tile_size)
-    else:
-        dims = _get_structured_header_dims(segy_file, tile_size)
-    return tiledb.ArraySchema(
-        domain=tiledb.Domain(*dims),
-        attrs=[
-            tiledb.Attr(f.name, f.dtype, filters=TRACE_FIELD_FILTERS)
-            for f in TRACE_FIELDS
-        ],
-    )
-
-
-def _get_data_schema(segy_file: SegyFile, tile_size: int) -> tiledb.ArraySchema:
-    if segy_file.unstructured:
-        dims = _get_unstructured_data_dims(segy_file, tile_size)
-    else:
-        dims = _get_structured_data_dims(segy_file, tile_size)
-    return tiledb.ArraySchema(
-        domain=tiledb.Domain(*dims), attrs=[tiledb.Attr(dtype=segy_file.dtype)]
-    )
-
-
-def _get_unstructured_header_dims(
-    segy_file: SegyFile, tile_size: int
-) -> Sequence[tiledb.Dim]:
-    domain = (0, segy_file.tracecount - 1)
-    return [
-        tiledb.Dim(
-            name="traces",
-            domain=domain,
-            dtype=np.uint64,
-            tile=np.clip(tile_size // TRACE_FIELDS_SIZE, 1, segy_file.tracecount),
-        ),
-    ]
-
-
-def _get_structured_header_dims(
-    segy_file: SegyFile, tile_size: int
-) -> Sequence[tiledb.Dim]:
-    ilines, xlines, offsets = map(
-        len, (segy_file.ilines, segy_file.xlines, segy_file.offsets)
-    )
-    dtype = np.uintc
-
-    if segy_file.sorting == TraceSortingFormat.INLINE_SORTING:
-        iline_tile = np.clip(tile_size // (xlines * TRACE_FIELDS_SIZE), 1, ilines)
-        xline_tile = xlines
-    else:
-        iline_tile = ilines
-        xline_tile = np.clip(tile_size // (ilines * TRACE_FIELDS_SIZE), 1, xlines)
-
-    dims = [
-        tiledb.Dim(
-            name="ilines", domain=(0, ilines - 1), dtype=dtype, tile=iline_tile,
-        ),
-        tiledb.Dim(
-            name="xlines", domain=(0, xlines - 1), dtype=dtype, tile=xline_tile,
-        ),
-    ]
-    if offsets > 1:
-        dims.append(
-            tiledb.Dim(name="offsets", domain=(0, offsets - 1), dtype=dtype, tile=1)
-        )
-    return dims
-
-
-def _get_unstructured_data_dims(
-    segy_file: SegyFile, tile_size: int
-) -> Sequence[tiledb.Dim]:
-    samples = len(segy_file.samples)
-    cell_size = segy_file.dtype.itemsize
-    dtype = np.uint64
-    return [
-        tiledb.Dim(
-            name="traces",
-            domain=(0, segy_file.tracecount - 1),
-            dtype=dtype,
-            tile=np.clip(tile_size // (samples * cell_size), 1, segy_file.tracecount),
-        ),
-        tiledb.Dim(
-            name="samples",
-            domain=(0, samples - 1),
-            dtype=dtype,
-            tile=np.clip(tile_size // cell_size, 1, samples),
-        ),
-    ]
-
-
-def _get_structured_data_dims(
-    segy_file: SegyFile, tile_size: int
-) -> Sequence[tiledb.Dim]:
-    cell_size = segy_file.dtype.itemsize
-    ilines, xlines, offsets, samples = map(
-        len, (segy_file.ilines, segy_file.xlines, segy_file.offsets, segy_file.samples)
-    )
-    dtype = np.uintc
-
-    if segy_file.sorting == TraceSortingFormat.INLINE_SORTING:
-        iline_tile = np.clip(tile_size // (xlines * samples * cell_size), 1, ilines)
-        xline_tile = xlines
-    else:
-        iline_tile = ilines
-        xline_tile = np.clip(tile_size // (ilines * samples * cell_size), 1, xlines)
-
-    dims = [
-        tiledb.Dim(
-            name="ilines", domain=(0, ilines - 1), dtype=dtype, tile=iline_tile,
-        ),
-        tiledb.Dim(
-            name="xlines", domain=(0, xlines - 1), dtype=dtype, tile=xline_tile,
-        ),
-        tiledb.Dim(
-            name="samples",
-            domain=(0, samples - 1),
-            dtype=dtype,
-            tile=np.clip(tile_size // cell_size, 1, samples),
-        ),
-    ]
-    if offsets > 1:
-        dims.insert(
-            2, tiledb.Dim(name="offsets", domain=(0, offsets - 1), dtype=dtype, tile=1),
-        )
-    return dims
-
-
-def _fill_headers(tdb: tiledb.Array, segy_file: SegyFile, tile_size: int) -> None:
-    tdb.meta["__text__"] = b"".join(segy_file.text)
-    for k, v in segy_file.bin.items():
-        tdb.meta[str(k)] = v
-    if segy_file.unstructured:
-        _fill_unstructured_trace_headers(tdb, segy_file, tile_size)
-    else:
-        _fill_structured_trace_headers(tdb, segy_file, tile_size)
-
-
-def _fill_unstructured_trace_headers(
-    tdb: tiledb.Array, segy_file: SegyFile, tile_size: int
+def segy_to_tiledb(
+    segy_file: SegyFile,
+    uri: str,
+    *,
+    tile_size: int,
+    config: Optional[tiledb.Config] = None,
 ) -> None:
-    step = np.clip(tile_size // TRACE_FIELDS_SIZE, 1, segy_file.tracecount)
-    for sl in _iter_slices(segy_file.tracecount, step):
-        headers = [np.zeros(sl.stop - sl.start, dtype) for dtype in TRACE_FIELD_DTYPES]
-        for i, field in enumerate(segy_file.header[sl]):
-            getfield, buf = field.getfield, field.buf
-            for key, header in zip(TRACE_FIELD_ENUMS, headers):
-                v = getfield(buf, key)
-                if v:
-                    header[i] = v
-        tdb[sl] = dict(zip(TRACE_FIELD_NAMES, headers))
-
-
-def _fill_structured_trace_headers(
-    tdb: tiledb.Array, segy_file: SegyFile, tile_size: int
-) -> None:
-    ilines, xlines = map(len, (segy_file.ilines, segy_file.xlines))
+    cls: Type[SegyFileConverter]
     if segy_file.sorting == TraceSortingFormat.INLINE_SORTING:
-        step = np.clip(tile_size // (xlines * TRACE_FIELDS_SIZE), 1, ilines)
+        cls = StructuredSegyFileConverter
+    elif segy_file.sorting == TraceSortingFormat.CROSSLINE_SORTING:
+        cls = StructuredSegyFileConverter
     else:
-        step = np.clip(tile_size // (ilines * TRACE_FIELDS_SIZE), 1, xlines)
+        cls = UnstructuredSegyFileConverter
 
-    if tdb.schema.domain.has_dim("offsets"):
-        for i_offset, offset in enumerate(segy_file.offsets):
-            for islice, xslice, subcube in _iter_subcube_headers(
-                segy_file, step, offset
-            ):
-                tdb[islice, xslice, i_offset] = subcube
-    else:
-        for islice, xslice, subcube in _iter_subcube_headers(segy_file, step):
-            tdb[islice, xslice] = subcube
+    cls(segy_file, tile_size, config).to_tiledb(uri)
 
 
-def _iter_subcube_headers(
-    segy_file: SegyFile, step: int, offset: Optional[int] = None
-) -> Iterator[Tuple[slice, slice, np.ndarray]]:
-    if segy_file.sorting == TraceSortingFormat.INLINE_SORTING:
-        fast_headers = segy_file.header.iline
-        fast_lines = segy_file.ilines
-        num_slow_lines = len(segy_file.xlines)
-        axis = 0
-    else:
-        fast_headers = segy_file.header.xline
-        fast_lines = segy_file.xlines
-        num_slow_lines = len(segy_file.ilines)
-        axis = 1
-    if offset is None:
-        offset = segy_file.fast.default_offset
-    islice = xslice = slice(None, None)
-    for fast_slice in _iter_slices(len(fast_lines), step):
-        headers = [
-            np.zeros((fast_slice.stop - fast_slice.start, num_slow_lines), dtype)
-            for dtype in TRACE_FIELD_DTYPES
+class SegyFileConverter(ABC):
+    def __init__(
+        self,
+        segy_file: SegyFile,
+        tile_size: int,
+        config: Optional[tiledb.Config] = None,
+    ):
+        self.segy_file = segy_file
+        self.tile_size = tile_size
+        self.config = config
+
+    def to_tiledb(self, uri: str) -> None:
+        if tiledb.object_type(uri) != "group":
+            tiledb.group_create(uri)
+
+        headers_uri = os.path.join(uri, "headers")
+        if tiledb.object_type(headers_uri) != "array":
+            with self._tiledb_array(headers_uri, self.header_schema) as tdb:
+                self._fill_headers(tdb)
+
+        data_uri = os.path.join(uri, "data")
+        if tiledb.object_type(data_uri) != "array":
+            with self._tiledb_array(data_uri, self.data_schema) as tdb:
+                self._fill_data(tdb)
+
+    @property
+    def header_schema(self) -> tiledb.ArraySchema:
+        return tiledb.ArraySchema(
+            domain=tiledb.Domain(*self._header_dims()),
+            attrs=[
+                tiledb.Attr(f.name, f.dtype, filters=TRACE_FIELD_FILTERS)
+                for f in TRACE_FIELDS
+            ],
+        )
+
+    @property
+    def data_schema(self) -> tiledb.ArraySchema:
+        return tiledb.ArraySchema(
+            domain=tiledb.Domain(*self._data_dims()),
+            attrs=[tiledb.Attr(dtype=self.segy_file.dtype)],
+        )
+
+    @contextmanager
+    def _tiledb_array(
+        self, uri: str, schema: tiledb.ArraySchema
+    ) -> Iterator[tiledb.Array]:
+        tiledb.DenseArray.create(uri, schema)
+        with tiledb.DenseArray(uri, mode="w") as tdb:
+            yield tdb
+        tiledb.consolidate(uri, config=self.config)
+        tiledb.vacuum(uri)
+
+    @abstractmethod
+    def _header_dims(self) -> Iterable[tiledb.Dim]:
+        ...
+
+    @abstractmethod
+    def _data_dims(self) -> Iterable[tiledb.Dim]:
+        ...
+
+    @abstractmethod
+    def _fill_headers(self, tdb: tiledb.Array) -> None:
+        tdb.meta["__text__"] = b"".join(self.segy_file.text)
+        for k, v in self.segy_file.bin.items():
+            tdb.meta[str(k)] = v
+
+    @abstractmethod
+    def _fill_data(self, tdb: tiledb.Array) -> None:
+        tdb.meta["samples"] = self.segy_file.samples.tolist()
+
+
+class UnstructuredSegyFileConverter(SegyFileConverter):
+    @property
+    def tracecount(self) -> int:
+        return self.segy_file.tracecount  # type: ignore
+
+    def _header_dims(self) -> Iterable[tiledb.Dim]:
+        return [
+            tiledb.Dim(
+                name="traces",
+                domain=(0, self.tracecount - 1),
+                dtype=np.uint64,
+                tile=np.clip(self.tile_size // TRACE_FIELDS_SIZE, 1, self.tracecount),
+            ),
         ]
-        for i, line_id in enumerate(fast_lines[fast_slice]):
-            for j, field in enumerate(fast_headers[line_id, offset]):
+
+    def _data_dims(self) -> Iterable[tiledb.Dim]:
+        samples = len(self.segy_file.samples)
+        cell_size = self.segy_file.dtype.itemsize
+        dtype = np.uint64
+        return [
+            tiledb.Dim(
+                name="traces",
+                domain=(0, self.tracecount - 1),
+                dtype=dtype,
+                tile=np.clip(
+                    self.tile_size // (samples * cell_size), 1, self.tracecount
+                ),
+            ),
+            tiledb.Dim(
+                name="samples",
+                domain=(0, samples - 1),
+                dtype=dtype,
+                tile=np.clip(self.tile_size // cell_size, 1, samples),
+            ),
+        ]
+
+    def _fill_headers(self, tdb: tiledb.Array) -> None:
+        super()._fill_headers(tdb)
+        step = np.clip(self.tile_size // TRACE_FIELDS_SIZE, 1, self.tracecount)
+        for sl in iter_slices(self.tracecount, step):
+            headers = [
+                np.zeros(sl.stop - sl.start, dtype) for dtype in TRACE_FIELD_DTYPES
+            ]
+            for i, field in enumerate(self.segy_file.header[sl]):
                 getfield, buf = field.getfield, field.buf
                 for key, header in zip(TRACE_FIELD_ENUMS, headers):
                     v = getfield(buf, key)
                     if v:
-                        header[i, j] = v
-        if axis == 0:
-            islice = fast_slice
-        else:
-            xslice = fast_slice
-            headers = [h.T for h in headers]
-        yield islice, xslice, dict(zip(TRACE_FIELD_NAMES, headers))
+                        header[i] = v
+            tdb[sl] = dict(zip(TRACE_FIELD_NAMES, headers))
 
-
-def _fill_data(tdb: tiledb.Array, segy_file: SegyFile, tile_size: int) -> None:
-    tdb.meta["samples"] = segy_file.samples.tolist()
-    if segy_file.unstructured:
-        _fill_unstructured_data(tdb, segy_file, tile_size)
-    else:
-        tdb.meta["ilines"] = segy_file.ilines.tolist()
-        tdb.meta["xlines"] = segy_file.xlines.tolist()
-        if tdb.schema.domain.has_dim("offsets"):
-            tdb.meta["offsets"] = segy_file.offsets.tolist()
-        _fill_structured_data(tdb, segy_file, tile_size)
-
-
-def _fill_unstructured_data(
-    tdb: tiledb.Array, segy_file: SegyFile, tile_size: int
-) -> None:
-    dtype = segy_file.dtype
-    step = np.clip(
-        tile_size // (len(segy_file.samples) * dtype.itemsize), 1, segy_file.tracecount
-    )
-    for sl in _iter_slices(segy_file.tracecount, step):
-        tdb[sl] = segy_file.trace.raw[sl]
-
-
-def _fill_structured_data(
-    tdb: tiledb.Array, segy_file: SegyFile, tile_size: int
-) -> None:
-    cell_size = segy_file.dtype.itemsize
-    ilines, xlines, samples = map(
-        len, (segy_file.ilines, segy_file.xlines, segy_file.samples)
-    )
-    if segy_file.sorting == TraceSortingFormat.INLINE_SORTING:
-        step = np.clip(tile_size // (xlines * samples * cell_size), 1, ilines,)
-    else:
-        step = np.clip(tile_size // (ilines * samples * cell_size), 1, xlines,)
-
-    if tdb.schema.domain.has_dim("offsets"):
-        for i_offset, offset in enumerate(segy_file.offsets):
-            for islice, xslice, subcube in _iter_subcubes(segy_file, step, offset):
-                tdb[islice, xslice, i_offset] = subcube
-    else:
-        for islice, xslice, subcube in _iter_subcubes(segy_file, step):
-            tdb[islice, xslice] = subcube
-
-
-def _iter_subcubes(
-    segy_file: SegyFile, step: int, offset: Optional[int] = None
-) -> Iterator[Tuple[slice, slice, np.ndarray]]:
-    if segy_file.sorting == TraceSortingFormat.INLINE_SORTING:
-        fast_lines = segy_file.ilines
-        axis = 0
-    else:
-        fast_lines = segy_file.xlines
-        axis = 1
-    fast_line = segy_file.fast
-    if offset is None:
-        offset = fast_line.default_offset
-    islice = xslice = slice(None, None)
-    for fast_slice in _iter_slices(len(fast_lines), step):
-        subcube = np.stack(
-            [fast_line[i, offset] for i in fast_lines[fast_slice]], axis=axis
+    def _fill_data(self, tdb: tiledb.Array) -> None:
+        super()._fill_data(tdb)
+        dtype = self.segy_file.dtype
+        step = np.clip(
+            self.tile_size // (len(self.segy_file.samples) * dtype.itemsize),
+            1,
+            self.tracecount,
         )
-        if axis == 0:
-            islice = fast_slice
+        for sl in iter_slices(self.tracecount, step):
+            tdb[sl] = self.segy_file.trace.raw[sl]
+
+
+class StructuredSegyFileConverter(SegyFileConverter):
+    def _header_dims(self) -> Iterable[tiledb.Dim]:
+        ilines, xlines, offsets = map(
+            len, (self.segy_file.ilines, self.segy_file.xlines, self.segy_file.offsets)
+        )
+        dtype = np.uintc
+
+        if self.segy_file.sorting == TraceSortingFormat.INLINE_SORTING:
+            iline_tile = np.clip(
+                self.tile_size // (xlines * TRACE_FIELDS_SIZE), 1, ilines
+            )
+            xline_tile = xlines
         else:
-            xslice = fast_slice
-        yield islice, xslice, subcube
+            iline_tile = ilines
+            xline_tile = np.clip(
+                self.tile_size // (ilines * TRACE_FIELDS_SIZE), 1, xlines
+            )
+
+        dims = [
+            tiledb.Dim(
+                name="ilines", domain=(0, ilines - 1), dtype=dtype, tile=iline_tile,
+            ),
+            tiledb.Dim(
+                name="xlines", domain=(0, xlines - 1), dtype=dtype, tile=xline_tile,
+            ),
+        ]
+        if offsets > 1:
+            dims.append(
+                tiledb.Dim(name="offsets", domain=(0, offsets - 1), dtype=dtype, tile=1)
+            )
+        return dims
+
+    def _data_dims(self) -> Iterable[tiledb.Dim]:
+        cell_size = self.segy_file.dtype.itemsize
+        ilines, xlines, offsets, samples = map(
+            len,
+            (
+                self.segy_file.ilines,
+                self.segy_file.xlines,
+                self.segy_file.offsets,
+                self.segy_file.samples,
+            ),
+        )
+        dtype = np.uintc
+
+        if self.segy_file.sorting == TraceSortingFormat.INLINE_SORTING:
+            iline_tile = np.clip(
+                self.tile_size // (xlines * samples * cell_size), 1, ilines
+            )
+            xline_tile = xlines
+        else:
+            iline_tile = ilines
+            xline_tile = np.clip(
+                self.tile_size // (ilines * samples * cell_size), 1, xlines
+            )
+
+        dims = [
+            tiledb.Dim(
+                name="ilines", domain=(0, ilines - 1), dtype=dtype, tile=iline_tile,
+            ),
+            tiledb.Dim(
+                name="xlines", domain=(0, xlines - 1), dtype=dtype, tile=xline_tile,
+            ),
+            tiledb.Dim(
+                name="samples",
+                domain=(0, samples - 1),
+                dtype=dtype,
+                tile=np.clip(self.tile_size // cell_size, 1, samples),
+            ),
+        ]
+        if offsets > 1:
+            dims.insert(
+                2,
+                tiledb.Dim(
+                    name="offsets", domain=(0, offsets - 1), dtype=dtype, tile=1
+                ),
+            )
+        return dims
+
+    def _fill_headers(self, tdb: tiledb.Array) -> None:
+        super()._fill_headers(tdb)
+        ilines, xlines = map(len, (self.segy_file.ilines, self.segy_file.xlines))
+        if self.segy_file.sorting == TraceSortingFormat.INLINE_SORTING:
+            step = np.clip(self.tile_size // (xlines * TRACE_FIELDS_SIZE), 1, ilines)
+        else:
+            step = np.clip(self.tile_size // (ilines * TRACE_FIELDS_SIZE), 1, xlines)
+
+        if tdb.schema.domain.has_dim("offsets"):
+            for i_offset, offset in enumerate(self.segy_file.offsets):
+                for islice, xslice, subcube in self._iter_subcube_headers(step, offset):
+                    tdb[islice, xslice, i_offset] = subcube
+        else:
+            for islice, xslice, subcube in self._iter_subcube_headers(step):
+                tdb[islice, xslice] = subcube
+
+    def _fill_data(self, tdb: tiledb.Array) -> None:
+        super()._fill_data(tdb)
+        tdb.meta["ilines"] = self.segy_file.ilines.tolist()
+        tdb.meta["xlines"] = self.segy_file.xlines.tolist()
+        if tdb.schema.domain.has_dim("offsets"):
+            tdb.meta["offsets"] = self.segy_file.offsets.tolist()
+
+        cell_size = self.segy_file.dtype.itemsize
+        ilines, xlines, samples = map(
+            len, (self.segy_file.ilines, self.segy_file.xlines, self.segy_file.samples)
+        )
+        if self.segy_file.sorting == TraceSortingFormat.INLINE_SORTING:
+            step = np.clip(self.tile_size // (xlines * samples * cell_size), 1, ilines,)
+        else:
+            step = np.clip(self.tile_size // (ilines * samples * cell_size), 1, xlines,)
+
+        if tdb.schema.domain.has_dim("offsets"):
+            for i_offset, offset in enumerate(self.segy_file.offsets):
+                for islice, xslice, subcube in self._iter_subcubes(step, offset):
+                    tdb[islice, xslice, i_offset] = subcube
+        else:
+            for islice, xslice, subcube in self._iter_subcubes(step):
+                tdb[islice, xslice] = subcube
+
+    def _iter_subcube_headers(
+        self, step: int, offset: Optional[int] = None
+    ) -> Iterator[Tuple[slice, slice, np.ndarray]]:
+        if self.segy_file.sorting == TraceSortingFormat.INLINE_SORTING:
+            fast_headers = self.segy_file.header.iline
+            fast_lines = self.segy_file.ilines
+            num_slow_lines = len(self.segy_file.xlines)
+            axis = 0
+        else:
+            fast_headers = self.segy_file.header.xline
+            fast_lines = self.segy_file.xlines
+            num_slow_lines = len(self.segy_file.ilines)
+            axis = 1
+        if offset is None:
+            offset = self.segy_file.fast.default_offset
+        islice = xslice = slice(None, None)
+        for fast_slice in iter_slices(len(fast_lines), step):
+            headers = [
+                np.zeros((fast_slice.stop - fast_slice.start, num_slow_lines), dtype)
+                for dtype in TRACE_FIELD_DTYPES
+            ]
+            for i, line_id in enumerate(fast_lines[fast_slice]):
+                for j, field in enumerate(fast_headers[line_id, offset]):
+                    getfield, buf = field.getfield, field.buf
+                    for key, header in zip(TRACE_FIELD_ENUMS, headers):
+                        v = getfield(buf, key)
+                        if v:
+                            header[i, j] = v
+            if axis == 0:
+                islice = fast_slice
+            else:
+                xslice = fast_slice
+                headers = [h.T for h in headers]
+            yield islice, xslice, dict(zip(TRACE_FIELD_NAMES, headers))
+
+    def _iter_subcubes(
+        self, step: int, offset: Optional[int] = None
+    ) -> Iterator[Tuple[slice, slice, np.ndarray]]:
+        if self.segy_file.sorting == TraceSortingFormat.INLINE_SORTING:
+            fast_lines = self.segy_file.ilines
+            axis = 0
+        else:
+            fast_lines = self.segy_file.xlines
+            axis = 1
+        fast_line = self.segy_file.fast
+        if offset is None:
+            offset = fast_line.default_offset
+        islice = xslice = slice(None, None)
+        for fast_slice in iter_slices(len(fast_lines), step):
+            subcube = np.stack(
+                [fast_line[i, offset] for i in fast_lines[fast_slice]], axis=axis
+            )
+            if axis == 0:
+                islice = fast_slice
+            else:
+                xslice = fast_slice
+            yield islice, xslice, subcube
 
 
-def _iter_slices(size: int, step: int) -> Iterator[slice]:
+def iter_slices(size: int, step: int) -> Iterator[slice]:
     r = range(0, size, step)
     yield from map(slice, r, r[1:])
     yield slice(r[-1], size)
 
 
-if __name__ == "__main__":
+def main() -> None:
     import shutil
     import sys
 
@@ -366,4 +385,13 @@ if __name__ == "__main__":
         shutil.rmtree(output_dir)
 
     with segyio.open(segy_file, strict=False) as segy_file:
-        create(output_dir, segy_file, 4 * 1024 ** 2)
+        segy_to_tiledb(
+            segy_file,
+            output_dir,
+            tile_size=4 * 1024 ** 2,
+            config=tiledb.Config({"sm.consolidation.buffer_size": 500000}),
+        )
+
+
+if __name__ == "__main__":
+    main()
