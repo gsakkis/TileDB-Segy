@@ -1,3 +1,5 @@
+__all__ = ["segy_to_tiledb"]
+
 import os
 from abc import ABC, abstractmethod
 from collections import namedtuple
@@ -197,7 +199,7 @@ class StructuredSegyFileConverter(SegyFileConverter):
 
     def _get_dims(self, trace_size: int) -> Iterable[tiledb.Dim]:
         dtype = np.uintc
-        dims = [
+        return [
             tiledb.Dim(
                 name="ilines",
                 domain=(0, self._iline_count - 1),
@@ -210,15 +212,13 @@ class StructuredSegyFileConverter(SegyFileConverter):
                 dtype=dtype,
                 tile=self._xline_tile(trace_size),
             ),
+            tiledb.Dim(
+                name="offsets",
+                domain=(0, len(self.segy_file.offsets) - 1),
+                dtype=dtype,
+                tile=1,
+            ),
         ]
-        offsets = len(self.segy_file.offsets)
-        if offsets > 1:
-            dims.append(
-                tiledb.Dim(
-                    name="offsets", domain=(0, offsets - 1), dtype=dtype, tile=1,
-                )
-            )
-        return dims
 
     def _fill_headers(self, tdb: tiledb.Array) -> None:
         super()._fill_headers(tdb)
@@ -249,8 +249,7 @@ class StructuredSegyFileConverter(SegyFileConverter):
 
         tdb.meta["ilines"] = self.segy_file.ilines.tolist()
         tdb.meta["xlines"] = self.segy_file.xlines.tolist()
-        if tdb.schema.domain.has_dim("offsets"):
-            tdb.meta["offsets"] = self.segy_file.offsets.tolist()
+        tdb.meta["offsets"] = self.segy_file.offsets.tolist()
 
         is_inline = self.segy_file.sorting == TraceSortingFormat.INLINE_SORTING
         get_line = self.segy_file.fast
@@ -267,20 +266,13 @@ class StructuredSegyFileConverter(SegyFileConverter):
         is_inline = self.segy_file.sorting == TraceSortingFormat.INLINE_SORTING
         fast_lines = self._fast_lines
         full_slice = slice(None, None)
-        if len(self.segy_file.offsets) > 1:
-            for i_offset, offset in enumerate(self.segy_file.offsets):
-                for fast_slice in _iter_slices(len(fast_lines), step):
-                    hyperslice = [fast_slice, full_slice]
-                    if not is_inline:
-                        hyperslice.reverse()
-                    yield (*hyperslice, i_offset), offset, fast_lines[fast_slice]
-        else:
-            offset = self.segy_file.fast.default_offset
+        for i_offset, offset in enumerate(self.segy_file.offsets):
             for fast_slice in _iter_slices(len(fast_lines), step):
-                hyperslice = [fast_slice, full_slice]
-                if not is_inline:
-                    hyperslice.reverse()
-                yield tuple(hyperslice), offset, fast_lines[fast_slice]
+                if is_inline:
+                    hyperslice = (fast_slice, full_slice, i_offset)
+                else:
+                    hyperslice = (full_slice, fast_slice, i_offset)
+                yield hyperslice, offset, fast_lines[fast_slice]
 
     @abstractmethod
     def _iline_tile(self, trace_size: int) -> int:
