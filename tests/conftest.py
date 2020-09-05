@@ -7,6 +7,7 @@ import segyio
 import tiledb
 from segyio import SegyFile, TraceSortingFormat
 
+from tilesegy.api import TileSegy
 from tilesegy.create import segy_to_tiledb
 
 from .segyio_utils import generate_structured_segy, generate_unstructured_segy
@@ -31,7 +32,11 @@ STRUCTURED_SEGY_COMBOS = {
 }
 
 
-def iter_segyfiles(structured: bool) -> Iterator[SegyFile]:
+def iter_segyfiles(structured: Optional[bool] = None) -> Iterator[SegyFile]:
+    if structured is None:
+        yield from it.chain(iter_segyfiles(False), iter_segyfiles(True))
+        return
+
     generate_segy: Callable[..., None]
     if structured:
         combos = STRUCTURED_SEGY_COMBOS
@@ -49,7 +54,7 @@ def iter_segyfiles(structured: bool) -> Iterator[SegyFile]:
         yield segyio.open(path, ignore_geometry=not structured)
 
 
-def tilesegy(segy_file: SegyFile) -> Path:
+def tilesegy(segy_file: SegyFile) -> TileSegy:
     path = Path(segy_file._filename).with_suffix(".tdb")
     if not path.exists():
         segy_to_tiledb(
@@ -58,19 +63,22 @@ def tilesegy(segy_file: SegyFile) -> Path:
             tile_size=1024 ** 2,
             config=tiledb.Config({"sm.consolidation.buffer_size": 500000}),
         )
-    return path
+    return TileSegy(path)
 
 
-def parametrize_segys(
-    segyfile_name: str, tilesegy_name: str, structured: Optional[bool] = None
-) -> Any:
-    segy_files: Iterator[SegyFile]
-    if structured is None:
-        segy_files = it.chain(iter_segyfiles(False), iter_segyfiles(True))
-    else:
-        segy_files = iter_segyfiles(structured)
+def parametrize_tilesegys(tilesegy_name: str, structured: Optional[bool] = None) -> Any:
     return pytest.mark.parametrize(
-        (segyfile_name, tilesegy_name),
-        ((segy_file, tilesegy(segy_file)) for segy_file in segy_files),
-        ids=lambda s: Path(s._filename).stem if isinstance(s, SegyFile) else "sgy",
+        tilesegy_name,
+        map(tilesegy, iter_segyfiles(structured)),
+        ids=lambda t: Path(t.uri).stem,
+    )
+
+
+def parametrize_tilesegy_segyfiles(
+    tilesegy_name: str, segyfile_name: str, structured: Optional[bool] = None
+) -> Any:
+    return pytest.mark.parametrize(
+        (tilesegy_name, segyfile_name),
+        ((tilesegy(segy_file), segy_file) for segy_file in iter_segyfiles(structured)),
+        ids=lambda x: Path(x.uri).stem if isinstance(x, TileSegy) else None,
     )
