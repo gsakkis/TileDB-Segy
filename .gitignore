@@ -3,3 +3,4 @@
 build/
 dist/
 tilesegy.egg-info/
+tests/fixtures/
