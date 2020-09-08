@@ -114,7 +114,13 @@ def generate_structured_segy(
         from_array_crossline(path, data)
 
 
-def generate_unstructured_segy(path: Path, traces: int, samples: int) -> None:
+def generate_unstructured_segy(
+    path: Path,
+    traces: int,
+    samples: int,
+    sorting: segyio.TraceSortingFormat = segyio.TraceSortingFormat.UNKNOWN_SORTING,
+) -> None:
+    assert sorting == segyio.TraceSortingFormat.UNKNOWN_SORTING
     data = np.zeros((traces, samples), np.float32)
     for t, s in it.product(*map(range, data.shape)):
         data[t, s] = t + s / 10
