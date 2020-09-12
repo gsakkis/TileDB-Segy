@@ -3,6 +3,8 @@ from typing import Dict, List, Tuple, Union
 import numpy as np
 import tiledb
 
+from ._singledispatchmethod import singledispatchmethod  # type: ignore
+
 Index = Union[int, slice]
 
 
@@ -15,19 +17,34 @@ class Sized:
 
 
 class Header(Sized):
-    def __getitem__(self, i: Index) -> Union[int, List[int]]:
-        values = self._tdb[i]
-        return np.asscalar(values) if isinstance(i, int) else values.tolist()  # type: ignore
+    @singledispatchmethod
+    def __getitem__(self, i: object) -> None:
+        raise NotImplementedError(f"Cannot index by {i.__class__}")  # pragma: nocover
+
+    @__getitem__.register(int)
+    def _get_one(self, i: int) -> int:
+        return np.asscalar(self._tdb[i])  # type: ignore
+
+    @__getitem__.register(slice)
+    def _get_many(self, i: slice) -> List[int]:
+        return self._tdb[i].tolist()  # type: ignore
 
 
 class Headers(Sized):
-    def __getitem__(self, i: Index) -> Union[Dict[str, int], List[Dict[str, int]]]:
+    @singledispatchmethod
+    def __getitem__(self, i: object) -> None:
+        raise NotImplementedError(f"Cannot index by {i.__class__}")  # pragma: nocover
+
+    @__getitem__.register(int)
+    def _get_one(self, i: int) -> Dict[str, int]:
+        return self._tdb[i]  # type: ignore
+
+    @__getitem__.register(slice)
+    def _get_many(self, i: slice) -> List[Dict[str, int]]:
         headers = self._tdb[i]
-        if not isinstance(i, int):
-            keys = headers.keys()
-            columns = [v.tolist() for v in headers.values()]
-            headers = [dict(zip(keys, row)) for row in zip(*columns)]
-        return headers  # type: ignore
+        keys = headers.keys()
+        columns = [v.tolist() for v in headers.values()]
+        return [dict(zip(keys, row)) for row in zip(*columns)]
 
 
 class Traces(Sized):
