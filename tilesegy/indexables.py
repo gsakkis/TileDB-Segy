@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Tuple, Union, cast
+from typing import Dict, Iterable, Iterator, List, Optional, Tuple, Union, cast
 
 import numpy as np
 import tiledb
@@ -98,3 +98,36 @@ class Lines:
 
     def __len__(self) -> int:
         return cast(int, self._data_tdb.shape[self._dim])
+
+
+class FilteredRange:
+    """Fast filtering of ranges.
+
+    `FilteredRange(members)[start:stop:end]` returns an iterator over the values of
+    `range(start, stop, end)` that are included in `members`.
+
+    If `start` is None, it defaults to `min(members)` if `step` is increasing or `max(members)`
+    if step is decreasing.
+
+    If `stop` is None, it defaults to `max(members)+1` if `step` is increasing or `min(members)-1`
+    if step is decreasing.
+    """
+
+    def __init__(self, members: Iterable[int]):
+        members = set(members)
+        self._min_val = min(members)
+        self._max_val = max(members) + 1
+        self._is_member = members.__contains__
+
+    def __getitem__(self, i: Union[int, slice]) -> Iterator[int]:
+        s = slice(i, i + 1) if not isinstance(i, slice) else i
+        start, stop, step = s.start, s.stop, s.step
+        min_val = self._min_val
+        if step is None or step > 0:  # increasing step
+            if start is None or start < min_val:
+                start = min_val
+        else:  # decreasing step
+            if stop is None or stop < min_val - 1:
+                stop = min_val - 1
+        start, stop, step = slice(start, stop, step).indices(self._max_val)
+        return filter(self._is_member, range(start, stop, step))
