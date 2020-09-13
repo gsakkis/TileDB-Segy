@@ -5,7 +5,7 @@ from typing import Dict, List, Type
 import numpy as np
 import tiledb
 
-from .indexables import Traces
+from .indexables import Lines, Traces, tdb_meta_list_to_numpy
 
 
 class TileSegy:
@@ -32,7 +32,7 @@ class TileSegy:
 
     @property
     def samples(self) -> np.ndarray:
-        return np.asarray(self._data.meta["samples"])
+        return tdb_meta_list_to_numpy(self._data, "samples")
 
     @property
     def traces(self) -> Traces:
@@ -52,3 +52,21 @@ class TileSegy:
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({str(self._uri)!r})"
+
+
+class StructuredTileSegy(TileSegy):
+    @property
+    def offsets(self) -> np.ndarray:
+        return tdb_meta_list_to_numpy(self._data, "offsets")
+
+    @property
+    def ilines(self) -> Lines:
+        return Lines(self._data, self._headers, dimension=0, name="ilines")
+
+    @property
+    def xlines(self) -> Lines:
+        return Lines(self._data, self._headers, dimension=1, name="xlines")
+
+    @property
+    def depths(self) -> Lines:
+        return Lines(self._data, self._headers, dimension=3)

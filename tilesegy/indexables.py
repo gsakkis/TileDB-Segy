@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, cast
 
 import numpy as np
 import tiledb
@@ -6,6 +6,13 @@ import tiledb
 from ._singledispatchmethod import singledispatchmethod  # type: ignore
 
 Index = Union[int, slice]
+
+
+def tdb_meta_list_to_numpy(tdb: tiledb.Array, meta_key: str) -> np.ndarray:
+    value = tdb.meta[meta_key]
+    if not isinstance(value, tuple):
+        value = (value,)
+    return np.array(value)
 
 
 class Sized:
@@ -23,11 +30,11 @@ class Header(Sized):
 
     @__getitem__.register(int)
     def _get_one(self, i: int) -> int:
-        return np.asscalar(self._tdb[i])  # type: ignore
+        return cast(int, np.asscalar(self._tdb[i]))
 
     @__getitem__.register(slice)
     def _get_many(self, i: slice) -> List[int]:
-        return self._tdb[i].tolist()  # type: ignore
+        return cast(List[int], self._tdb[i].tolist())
 
 
 class Headers(Sized):
@@ -37,7 +44,7 @@ class Headers(Sized):
 
     @__getitem__.register(int)
     def _get_one(self, i: int) -> Dict[str, int]:
-        return self._tdb[i]  # type: ignore
+        return cast(Dict[str, int], self._tdb[i])
 
     @__getitem__.register(slice)
     def _get_many(self, i: slice) -> List[Dict[str, int]]:
@@ -47,15 +54,18 @@ class Headers(Sized):
         return [dict(zip(keys, row)) for row in zip(*columns)]
 
 
-class Traces(Sized):
-    def __init__(self, traces_tdb: tiledb.Array, headers_tdb: tiledb.Array):
-        super().__init__(traces_tdb)
+class Traces:
+    def __init__(self, data_tdb: tiledb.Array, headers_tdb: tiledb.Array):
+        self._data_tdb = data_tdb
         self._headers_tdb = headers_tdb
+
+    def __len__(self) -> int:
+        return len(self._data_tdb)
 
     def __getitem__(
         self, i: Union[Index, Tuple[Index, Index]]
     ) -> Union[np.number, np.ndarray]:
-        return self._tdb[i]
+        return self._data_tdb[i]
 
     @property
     def headers(self) -> Headers:
@@ -63,3 +73,28 @@ class Traces(Sized):
 
     def header(self, name: str) -> Header:
         return Header(tiledb.DenseArray(self._headers_tdb.uri, attr=name))
+
+
+class Lines:
+    def __init__(
+        self,
+        data_tdb: tiledb.Array,
+        headers_tdb: tiledb.Array,
+        *,
+        dimension: int,
+        name: Optional[str] = None,
+    ):
+        self._dim = dimension
+        self._data_tdb = data_tdb
+        self._headers_tdb = headers_tdb
+        self._name = name
+
+    @property
+    def indexes(self) -> np.ndarray:
+        if self._name is not None:
+            return tdb_meta_list_to_numpy(self._data_tdb, self._name)
+        else:
+            return np.arange(len(self))
+
+    def __len__(self) -> int:
+        return cast(int, self._data_tdb.shape[self._dim])

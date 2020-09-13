@@ -7,16 +7,17 @@ from tiledb.libtiledb import TileDBError
 
 import tilesegy
 from tests.conftest import parametrize_tilesegy_segyfiles, parametrize_tilesegys
-from tilesegy.api import TileSegy
+from tilesegy.api import StructuredTileSegy, TileSegy
 
 
 def assert_equal_arrays(a: np.ndarray, b: np.ndarray) -> None:
+    assert a.dtype == b.dtype
+    assert a.shape == b.shape
     np.testing.assert_array_equal(a, b)
-    assert a.dtype is b.dtype
 
 
 def segy_gen_to_array(segy_gen: Iterator[np.ndarray]) -> np.ndarray:
-    return np.array([a.copy() for a in segy_gen])
+    return np.array(list(map(np.copy, segy_gen)))
 
 
 def stringify_keys(d: Mapping[int, int]) -> Mapping[str, int]:
@@ -50,7 +51,7 @@ class TestTileSegy:
         with pytest.raises(TileDBError):
             t2.bin
 
-    @parametrize_tilesegys("t")
+    @parametrize_tilesegys("t", structured=False)
     def test_repr(self, t: TileSegy) -> None:
         assert repr(t) == f"TileSegy('{str(t.uri)}')"
 
@@ -143,3 +144,43 @@ class TestTileSegyTraces:
         assert t_attrs[i:] == s_attrs[i:].tolist()
         assert t_attrs[:j] == s_attrs[:j].tolist()
         assert t_attrs[i:j] == s_attrs[i:j].tolist()
+
+
+class TestStructuredTileSegy:
+    @parametrize_tilesegys("t", structured=True)
+    def test_repr(self, t: StructuredTileSegy) -> None:
+        assert repr(t) == f"StructuredTileSegy('{str(t.uri)}')"
+
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    def test_offsets(self, t: StructuredTileSegy, s: SegyFile) -> None:
+        assert_equal_arrays(t.offsets, s.offsets)
+
+
+class TestStructuredTileSegyIlines:
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    def test_len(self, t: StructuredTileSegy, s: SegyFile) -> None:
+        assert len(t.ilines) == len(s.iline)
+
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    def test_indexes(self, t: StructuredTileSegy, s: SegyFile) -> None:
+        assert_equal_arrays(t.ilines.indexes, s.ilines)
+
+
+class TestStructuredTileSegyXlines:
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    def test_len(self, t: StructuredTileSegy, s: SegyFile) -> None:
+        assert len(t.xlines) == len(s.xline)
+
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    def test_indexes(self, t: StructuredTileSegy, s: SegyFile) -> None:
+        assert_equal_arrays(t.xlines.indexes, s.xlines)
+
+
+class TestStructuredTileSegyDepths:
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    def test_len(self, t: StructuredTileSegy, s: SegyFile) -> None:
+        assert len(t.depths) == len(s.depth_slice)
+
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    def test_indexes(self, t: StructuredTileSegy, s: SegyFile) -> None:
+        assert_equal_arrays(t.depths.indexes, np.arange(len(s.samples)))

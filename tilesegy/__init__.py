@@ -3,12 +3,15 @@ from typing import Union
 
 import tiledb
 
-from .api import TileSegy
+from .api import StructuredTileSegy, TileSegy
 
 
 def open(uri: Union[str, Path]) -> TileSegy:
-    if not isinstance(uri, Path):
-        uri = Path(uri)
+    uri = Path(uri) if not isinstance(uri, Path) else uri
     headers = tiledb.DenseArray(str(uri / "headers"))
     data = tiledb.DenseArray(str(uri / "data"))
-    return TileSegy(uri, headers, data)
+    if data.schema.domain.has_dim("traces"):
+        cls = TileSegy
+    else:
+        cls = StructuredTileSegy
+    return cls(uri, headers, data)
