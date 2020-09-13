@@ -7,7 +7,7 @@ from tiledb.libtiledb import TileDBError
 
 import tilesegy
 from tests.conftest import parametrize_tilesegy_segyfiles, parametrize_tilesegys
-from tilesegy.api import StructuredTileSegy, TileSegy
+from tilesegy import StructuredTileSegy, TileSegy
 
 
 def assert_equal_arrays(a: np.ndarray, b: np.ndarray) -> None:

@@ -1,6 +1,6 @@
 from pathlib import Path
 from types import TracebackType
-from typing import Dict, List, Type
+from typing import Dict, List, Type, Union
 
 import numpy as np
 import tiledb
@@ -70,3 +70,14 @@ class StructuredTileSegy(TileSegy):
     @property
     def depths(self) -> Lines:
         return Lines(self._data, self._headers, dimension=3)
+
+
+def open(uri: Union[str, Path]) -> TileSegy:
+    uri = Path(uri) if not isinstance(uri, Path) else uri
+    headers = tiledb.DenseArray(str(uri / "headers"))
+    data = tiledb.DenseArray(str(uri / "data"))
+    if data.schema.domain.has_dim("traces"):
+        cls = TileSegy
+    else:
+        cls = StructuredTileSegy
+    return cls(uri, headers, data)

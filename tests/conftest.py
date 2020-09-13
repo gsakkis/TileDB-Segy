@@ -8,7 +8,7 @@ import tiledb
 from segyio import SegyFile, TraceSortingFormat
 
 import tilesegy
-from tilesegy.api import TileSegy
+from tilesegy import TileSegy
 from tilesegy.create import segy_to_tiledb
 
 from .segyio_utils import generate_structured_segy, generate_unstructured_segy
