@@ -2,7 +2,7 @@ from typing import Iterator, Mapping
 
 import numpy as np
 import pytest
-from segyio import SegyFile, TraceField
+from segyio import SegyFile, TraceField, TraceSortingFormat
 from tiledb.libtiledb import TileDBError
 
 import tilesegy
@@ -173,8 +173,16 @@ class TestStructuredTileSegyIlines:
         assert len(t.ilines) == len(s.iline)
 
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_indexes(self, t: StructuredTileSegy, s: SegyFile) -> None:
-        assert_equal_arrays(t.ilines.indexes, s.ilines)
+    def test_labels(self, t: StructuredTileSegy, s: SegyFile) -> None:
+        assert_equal_arrays(t.ilines.labels, s.ilines)
+
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    def test_get_one_line_one_offset(self, t: StructuredTileSegy, s: SegyFile) -> None:
+        i = np.random.choice(s.ilines)
+        x = np.random.choice(s.offsets)
+
+        assert_equal_arrays(t.ilines[i], s.iline[i])
+        assert_equal_arrays(t.ilines[i, x], s.iline[i, x])
 
 
 class TestStructuredTileSegyXlines:
@@ -183,8 +191,16 @@ class TestStructuredTileSegyXlines:
         assert len(t.xlines) == len(s.xline)
 
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_indexes(self, t: StructuredTileSegy, s: SegyFile) -> None:
-        assert_equal_arrays(t.xlines.indexes, s.xlines)
+    def test_labels(self, t: StructuredTileSegy, s: SegyFile) -> None:
+        assert_equal_arrays(t.xlines.labels, s.xlines)
+
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    def test_get_one_line_one_offset(self, t: StructuredTileSegy, s: SegyFile) -> None:
+        i = np.random.choice(s.xlines)
+        x = np.random.choice(s.offsets)
+
+        assert_equal_arrays(t.xlines[i], s.xline[i])
+        assert_equal_arrays(t.xlines[i, x], s.xline[i, x])
 
 
 class TestStructuredTileSegyDepths:
@@ -193,5 +209,13 @@ class TestStructuredTileSegyDepths:
         assert len(t.depths) == len(s.depth_slice)
 
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_indexes(self, t: StructuredTileSegy, s: SegyFile) -> None:
-        assert_equal_arrays(t.depths.indexes, np.arange(len(s.samples)))
+    def test_labels(self, t: StructuredTileSegy, s: SegyFile) -> None:
+        assert_equal_arrays(t.depths.labels, np.arange(len(s.samples)))
+
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    def test_get_one_line_one_offset(self, t: StructuredTileSegy, s: SegyFile) -> None:
+        i = np.random.randint(len(s.samples))
+        s_depth = s.depth_slice[i]
+        if s.sorting == TraceSortingFormat.CROSSLINE_SORTING:
+            s_depth = s_depth.swapaxes(0, 1)
+        assert_equal_arrays(t.depths[i], s_depth)

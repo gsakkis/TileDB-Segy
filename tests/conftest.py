@@ -26,9 +26,9 @@ STRUCTURED_SEGY_COMBOS = {
         TraceSortingFormat.CROSSLINE_SORTING,
         TraceSortingFormat.INLINE_SORTING,
     ],
-    "ilines": [70],
+    "ilines": [28],
     "xlines": [90],
-    "offsets": [1, 2],
+    "offsets": [1, 5],
     "samples": [10],
 }
 

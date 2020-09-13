@@ -80,24 +80,48 @@ class Lines:
         self,
         data_tdb: tiledb.Array,
         headers_tdb: tiledb.Array,
+        offsets: np.ndarray,
         *,
         dimension: int,
         name: Optional[str] = None,
     ):
-        self._dim = dimension
         self._data_tdb = data_tdb
         self._headers_tdb = headers_tdb
-        self._name = name
+        self._offsets = offsets
+        self._dim = dimension
+        if name is not None:
+            self._labels = tdb_meta_list_to_numpy(data_tdb, name)
+        else:
+            self._labels = np.arange(len(self))
+        for a in self._labels, self._offsets:
+            if len(np.unique(a)) != len(a):
+                raise ValueError(f"Array should not contain duplicates: {a}")
 
     @property
-    def indexes(self) -> np.ndarray:
-        if self._name is not None:
-            return tdb_meta_list_to_numpy(self._data_tdb, self._name)
-        else:
-            return np.arange(len(self))
+    def labels(self) -> np.ndarray:
+        return self._labels
 
     def __len__(self) -> int:
         return cast(int, self._data_tdb.shape[self._dim])
+
+    def __getitem__(self, i: Union[int, Tuple[int, int]]) -> np.ndarray:
+        if isinstance(i, tuple):
+            label, offset = i
+        else:
+            label = i
+            offset = self._offsets[0]
+        composite_idx: List[Index] = [slice(None)] * 4
+        composite_idx[self._dim] = get_index(label, self._labels)
+        composite_idx[2] = get_index(offset, self._offsets)
+        return self._data_tdb[tuple(composite_idx)]
+
+
+def get_index(value: np.number, a: np.ndarray) -> int:
+    indices = np.flatnonzero(a == value)
+    assert indices.size <= 1, indices
+    if indices.size == 0:
+        raise ValueError(f"{value} is not in array")
+    return cast(int, indices[0])
 
 
 class FilteredRange:

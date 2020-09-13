@@ -61,15 +61,19 @@ class StructuredTileSegy(TileSegy):
 
     @property
     def ilines(self) -> Lines:
-        return Lines(self._data, self._headers, dimension=0, name="ilines")
+        return Lines(
+            self._data, self._headers, self.offsets, dimension=0, name="ilines"
+        )
 
     @property
     def xlines(self) -> Lines:
-        return Lines(self._data, self._headers, dimension=1, name="xlines")
+        return Lines(
+            self._data, self._headers, self.offsets, dimension=1, name="xlines"
+        )
 
     @property
     def depths(self) -> Lines:
-        return Lines(self._data, self._headers, dimension=3)
+        return Lines(self._data, self._headers, self.offsets, dimension=3)
 
 
 def open(uri: Union[str, Path]) -> TileSegy:
