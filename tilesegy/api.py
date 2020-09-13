@@ -1,7 +1,6 @@
-import os
 from pathlib import Path
 from types import TracebackType
-from typing import Dict, List, Type, Union
+from typing import Dict, List, Type
 
 import numpy as np
 import tiledb
@@ -10,10 +9,14 @@ from .indexables import Traces
 
 
 class TileSegy:
-    def __init__(self, uri: Union[str, Path]):
-        self.uri = uri
-        self._data = tiledb.DenseArray(os.path.join(uri, "data"))
-        self._headers = tiledb.DenseArray(os.path.join(uri, "headers"))
+    def __init__(self, uri: Path, headers: tiledb.Array, data: tiledb.Array):
+        self._uri = uri
+        self._headers = headers
+        self._data = data
+
+    @property
+    def uri(self) -> Path:
+        return self._uri
 
     @property
     def bin(self) -> Dict[str, int]:
@@ -48,4 +51,4 @@ class TileSegy:
         self.close()
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({str(self.uri)!r})"
+        return f"{self.__class__.__name__}({str(self._uri)!r})"

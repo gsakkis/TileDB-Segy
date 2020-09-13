@@ -5,6 +5,7 @@ import pytest
 from segyio import SegyFile, TraceField
 from tiledb.libtiledb import TileDBError
 
+import tilesegy
 from tests.conftest import parametrize_tilesegy_segyfiles, parametrize_tilesegys
 from tilesegy.api import TileSegy
 
@@ -44,7 +45,7 @@ class TestTileSegy:
 
     @parametrize_tilesegys("t")
     def test_context_manager(self, t: TileSegy) -> None:
-        with TileSegy(t.uri) as t2:
+        with tilesegy.open(t.uri) as t2:
             t2.bin
         with pytest.raises(TileDBError):
             t2.bin

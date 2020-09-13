@@ -7,6 +7,7 @@ import segyio
 import tiledb
 from segyio import SegyFile, TraceSortingFormat
 
+import tilesegy
 from tilesegy.api import TileSegy
 from tilesegy.create import segy_to_tiledb
 
@@ -54,7 +55,7 @@ def iter_segyfiles(structured: Optional[bool] = None) -> Iterator[SegyFile]:
         yield segyio.open(path, ignore_geometry=not structured)
 
 
-def tilesegy(segy_file: SegyFile) -> TileSegy:
+def get_tilesegy(segy_file: SegyFile) -> TileSegy:
     path = Path(segy_file._filename).with_suffix(".tdb")
     if not path.exists():
         segy_to_tiledb(
@@ -63,13 +64,13 @@ def tilesegy(segy_file: SegyFile) -> TileSegy:
             tile_size=1024 ** 2,
             config=tiledb.Config({"sm.consolidation.buffer_size": 500000}),
         )
-    return TileSegy(path)
+    return tilesegy.open(path)
 
 
 def parametrize_tilesegys(tilesegy_name: str, structured: Optional[bool] = None) -> Any:
     return pytest.mark.parametrize(
         tilesegy_name,
-        map(tilesegy, iter_segyfiles(structured)),
+        map(get_tilesegy, iter_segyfiles(structured)),
         ids=lambda t: Path(t.uri).stem,
     )
 
@@ -79,6 +80,9 @@ def parametrize_tilesegy_segyfiles(
 ) -> Any:
     return pytest.mark.parametrize(
         (tilesegy_name, segyfile_name),
-        ((tilesegy(segy_file), segy_file) for segy_file in iter_segyfiles(structured)),
+        (
+            (get_tilesegy(segy_file), segy_file)
+            for segy_file in iter_segyfiles(structured)
+        ),
         ids=lambda x: Path(x.uri).stem if isinstance(x, TileSegy) else None,
     )
