@@ -78,6 +78,7 @@ class TestTileSegyTraces:
         x = np.random.randint(0, len(s.samples) // 2)
         y = np.random.randint(x + 1, len(s.samples))
 
+        assert_equal_arrays(t.traces[i, :], s.trace[i, :])
         assert_equal_arrays(t.traces[i, x:], s.trace[i, x:])
         assert_equal_arrays(t.traces[i, :y], s.trace[i, :y])
         assert_equal_arrays(t.traces[i, x:y], s.trace[i, x:y])
@@ -87,6 +88,7 @@ class TestTileSegyTraces:
         i = np.random.randint(0, s.tracecount // 2)
         j = np.random.randint(i + 1, s.tracecount)
 
+        assert_equal_arrays(t.traces[:], segy_gen_to_array(s.trace[:]))
         assert_equal_arrays(t.traces[i:], segy_gen_to_array(s.trace[i:]))
         assert_equal_arrays(t.traces[:j], segy_gen_to_array(s.trace[:j]))
         assert_equal_arrays(t.traces[i:j], segy_gen_to_array(s.trace[i:j]))
@@ -97,6 +99,7 @@ class TestTileSegyTraces:
         j = np.random.randint(i + 1, s.tracecount)
         x = np.random.randint(0, len(s.samples))
 
+        assert_equal_arrays(t.traces[:, x], np.fromiter(s.trace[:, x], s.dtype))
         assert_equal_arrays(t.traces[i:, x], np.fromiter(s.trace[i:, x], s.dtype))
         assert_equal_arrays(t.traces[:j, x], np.fromiter(s.trace[:j, x], s.dtype))
         assert_equal_arrays(t.traces[i:j, x], np.fromiter(s.trace[i:j, x], s.dtype))
@@ -109,14 +112,22 @@ class TestTileSegyTraces:
         x = np.random.randint(0, len(s.samples) // 2)
         y = np.random.randint(x + 1, len(s.samples))
 
+        assert_equal_arrays(t.traces[:, :], segy_gen_to_array(s.trace[:, :]))
+        assert_equal_arrays(t.traces[:, x:], segy_gen_to_array(s.trace[:, x:]))
+        assert_equal_arrays(t.traces[:, :y], segy_gen_to_array(s.trace[:, :y]))
+        assert_equal_arrays(t.traces[:, x:y], segy_gen_to_array(s.trace[:, x:y]))
+
+        assert_equal_arrays(t.traces[i:, :], segy_gen_to_array(s.trace[i:, :]))
         assert_equal_arrays(t.traces[i:, x:], segy_gen_to_array(s.trace[i:, x:]))
         assert_equal_arrays(t.traces[i:, :y], segy_gen_to_array(s.trace[i:, :y]))
         assert_equal_arrays(t.traces[i:, x:y], segy_gen_to_array(s.trace[i:, x:y]))
 
+        assert_equal_arrays(t.traces[:j, :], segy_gen_to_array(s.trace[:j, :]))
         assert_equal_arrays(t.traces[:j, x:], segy_gen_to_array(s.trace[:j, x:]))
         assert_equal_arrays(t.traces[:j, :y], segy_gen_to_array(s.trace[:j, :y]))
         assert_equal_arrays(t.traces[:j, x:y], segy_gen_to_array(s.trace[:j, x:y]))
 
+        assert_equal_arrays(t.traces[i:j, :], segy_gen_to_array(s.trace[i:j, :]))
         assert_equal_arrays(t.traces[i:j, x:], segy_gen_to_array(s.trace[i:j, x:]))
         assert_equal_arrays(t.traces[i:j, :y], segy_gen_to_array(s.trace[i:j, :y]))
         assert_equal_arrays(t.traces[i:j, x:y], segy_gen_to_array(s.trace[i:j, x:y]))
