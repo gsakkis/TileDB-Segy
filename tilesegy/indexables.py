@@ -8,11 +8,13 @@ from ._singledispatchmethod import singledispatchmethod  # type: ignore
 Index = Union[int, slice]
 
 
-def tdb_meta_list_to_numpy(tdb: tiledb.Array, meta_key: str) -> np.ndarray:
+def tdb_meta_list_to_numpy(
+    tdb: tiledb.Array, meta_key: str, dtype: Union[np.dtype, str, None] = None
+) -> np.ndarray:
     value = tdb.meta[meta_key]
     if not isinstance(value, tuple):
         value = (value,)
-    return np.array(value)
+    return np.array(value, dtype)
 
 
 class Sized:
@@ -90,7 +92,7 @@ class Lines:
         self._offsets = offsets
         self._dim = dimension
         if name is not None:
-            self._labels = tdb_meta_list_to_numpy(data_tdb, name)
+            self._labels = tdb_meta_list_to_numpy(data_tdb, name, dtype="intc")
         else:
             self._labels = np.arange(len(self))
         for a in self._labels, self._offsets:

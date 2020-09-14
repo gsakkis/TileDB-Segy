@@ -57,7 +57,7 @@ class TileSegy:
 class StructuredTileSegy(TileSegy):
     @property
     def offsets(self) -> np.ndarray:
-        return tdb_meta_list_to_numpy(self._data, "offsets")
+        return tdb_meta_list_to_numpy(self._data, "offsets", dtype="intc")
 
     @property
     def ilines(self) -> Lines:
