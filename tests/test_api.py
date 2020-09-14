@@ -2,7 +2,7 @@ from typing import Iterator, Mapping
 
 import numpy as np
 import pytest
-from segyio import SegyFile, TraceField, TraceSortingFormat
+from segyio import SegyFile, TraceField
 from tiledb.libtiledb import TileDBError
 
 import tilesegy
@@ -10,9 +10,16 @@ from tests.conftest import parametrize_tilesegy_segyfiles, parametrize_tilesegys
 from tilesegy import StructuredTileSegy, TileSegy
 
 
-def assert_equal_arrays(a: np.ndarray, b: np.ndarray) -> None:
+def assert_equal_arrays(a: np.ndarray, b: np.ndarray, reshape: bool = False) -> None:
     assert a.dtype == b.dtype
-    assert a.shape == b.shape
+    if reshape:
+        assert a.ndim == b.ndim + 1
+        assert a.shape[0] * a.shape[1] == b.shape[0]
+        assert a.shape[-2:] == b.shape[-2:]
+        b = b.reshape(a.shape)
+    else:
+        assert a.ndim == b.ndim
+        assert a.shape == b.shape
     np.testing.assert_array_equal(a, b)
 
 
@@ -184,6 +191,100 @@ class TestStructuredTileSegyIlines:
         assert_equal_arrays(t.ilines[i], s.iline[i])
         assert_equal_arrays(t.ilines[i, x], s.iline[i, x])
 
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    def test_get_slice_lines_one_offset(
+        self, t: StructuredTileSegy, s: SegyFile
+    ) -> None:
+        i, j = np.sort(np.random.choice(s.ilines, 2, replace=False))
+        x = np.random.choice(s.offsets)
+
+        assert_equal_arrays(t.ilines[:], segy_gen_to_array(s.iline[:]))
+        assert_equal_arrays(t.ilines[i:], segy_gen_to_array(s.iline[i:]))
+        assert_equal_arrays(t.ilines[:j], segy_gen_to_array(s.iline[:j]))
+        assert_equal_arrays(t.ilines[i:j], segy_gen_to_array(s.iline[i:j]))
+
+        assert_equal_arrays(t.ilines[:, x], segy_gen_to_array(s.iline[:, x]))
+        assert_equal_arrays(t.ilines[i:, x], segy_gen_to_array(s.iline[i:, x]))
+        assert_equal_arrays(t.ilines[:j, x], segy_gen_to_array(s.iline[:j, x]))
+        assert_equal_arrays(t.ilines[i:j, x], segy_gen_to_array(s.iline[i:j, x]))
+
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    def test_get_one_line_slice_offsets(
+        self, t: StructuredTileSegy, s: SegyFile
+    ) -> None:
+        if len(s.offsets) == 1:
+            pytest.skip("single offset segy")
+
+        i = np.random.choice(s.ilines)
+        x, y = s.offsets[1], s.offsets[3]
+
+        assert_equal_arrays(t.ilines[i, :], segy_gen_to_array(s.iline[i, :]))
+        assert_equal_arrays(t.ilines[i, x:], segy_gen_to_array(s.iline[i, x:]))
+        assert_equal_arrays(t.ilines[i, :y], segy_gen_to_array(s.iline[i, :y]))
+        assert_equal_arrays(t.ilines[i, x:y], segy_gen_to_array(s.iline[i, x:y]))
+
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    def test_get_slice_lines_slice_offsets(
+        self, t: StructuredTileSegy, s: SegyFile
+    ) -> None:
+        if len(s.offsets) == 1:
+            pytest.skip("single offset segy")
+
+        i, j = np.sort(np.random.choice(s.ilines, 2, replace=False))
+        x, y = s.offsets[1], s.offsets[3]
+
+        assert_equal_arrays(
+            t.ilines[:, :], segy_gen_to_array(s.iline[:, :]), reshape=True
+        )
+        assert_equal_arrays(
+            t.ilines[:, x:], segy_gen_to_array(s.iline[:, x:]), reshape=True
+        )
+        assert_equal_arrays(
+            t.ilines[:, :y], segy_gen_to_array(s.iline[:, :y]), reshape=True
+        )
+        assert_equal_arrays(
+            t.ilines[:, x:y], segy_gen_to_array(s.iline[:, x:y]), reshape=True
+        )
+
+        assert_equal_arrays(
+            t.ilines[i:, :], segy_gen_to_array(s.iline[i:, :]), reshape=True
+        )
+        assert_equal_arrays(
+            t.ilines[i:, x:], segy_gen_to_array(s.iline[i:, x:]), reshape=True
+        )
+        assert_equal_arrays(
+            t.ilines[i:, :y], segy_gen_to_array(s.iline[i:, :y]), reshape=True
+        )
+        assert_equal_arrays(
+            t.ilines[i:, x:y], segy_gen_to_array(s.iline[i:, x:y]), reshape=True
+        )
+
+        assert_equal_arrays(
+            t.ilines[:j, :], segy_gen_to_array(s.iline[:j, :]), reshape=True
+        )
+        assert_equal_arrays(
+            t.ilines[:j, x:], segy_gen_to_array(s.iline[:j, x:]), reshape=True
+        )
+        assert_equal_arrays(
+            t.ilines[:j, :y], segy_gen_to_array(s.iline[:j, :y]), reshape=True
+        )
+        assert_equal_arrays(
+            t.ilines[:j, x:y], segy_gen_to_array(s.iline[:j, x:y]), reshape=True
+        )
+
+        assert_equal_arrays(
+            t.ilines[i:j, :], segy_gen_to_array(s.iline[i:j, :]), reshape=True
+        )
+        assert_equal_arrays(
+            t.ilines[i:j, x:], segy_gen_to_array(s.iline[i:j, x:]), reshape=True
+        )
+        assert_equal_arrays(
+            t.ilines[i:j, :y], segy_gen_to_array(s.iline[i:j, :y]), reshape=True
+        )
+        assert_equal_arrays(
+            t.ilines[i:j, x:y], segy_gen_to_array(s.iline[i:j, x:y]), reshape=True
+        )
+
 
 class TestStructuredTileSegyXlines:
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
@@ -202,6 +303,100 @@ class TestStructuredTileSegyXlines:
         assert_equal_arrays(t.xlines[i], s.xline[i])
         assert_equal_arrays(t.xlines[i, x], s.xline[i, x])
 
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    def test_get_slice_lines_one_offset(
+        self, t: StructuredTileSegy, s: SegyFile
+    ) -> None:
+        i, j = np.sort(np.random.choice(s.xlines, 2, replace=False))
+        x = np.random.choice(s.offsets)
+
+        assert_equal_arrays(t.xlines[:], segy_gen_to_array(s.xline[:]))
+        assert_equal_arrays(t.xlines[i:], segy_gen_to_array(s.xline[i:]))
+        assert_equal_arrays(t.xlines[:j], segy_gen_to_array(s.xline[:j]))
+        assert_equal_arrays(t.xlines[i:j], segy_gen_to_array(s.xline[i:j]))
+
+        assert_equal_arrays(t.xlines[:, x], segy_gen_to_array(s.xline[:, x]))
+        assert_equal_arrays(t.xlines[i:, x], segy_gen_to_array(s.xline[i:, x]))
+        assert_equal_arrays(t.xlines[:j, x], segy_gen_to_array(s.xline[:j, x]))
+        assert_equal_arrays(t.xlines[i:j, x], segy_gen_to_array(s.xline[i:j, x]))
+
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    def test_get_one_line_slice_offsets(
+        self, t: StructuredTileSegy, s: SegyFile
+    ) -> None:
+        if len(s.offsets) == 1:
+            pytest.skip("single offset segy")
+
+        i = np.random.choice(s.xlines)
+        x, y = s.offsets[1], s.offsets[3]
+
+        assert_equal_arrays(t.xlines[i, :], segy_gen_to_array(s.xline[i, :]))
+        assert_equal_arrays(t.xlines[i, x:], segy_gen_to_array(s.xline[i, x:]))
+        assert_equal_arrays(t.xlines[i, :y], segy_gen_to_array(s.xline[i, :y]))
+        assert_equal_arrays(t.xlines[i, x:y], segy_gen_to_array(s.xline[i, x:y]))
+
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    def test_get_slice_lines_slice_offsets(
+        self, t: StructuredTileSegy, s: SegyFile
+    ) -> None:
+        if len(s.offsets) == 1:
+            pytest.skip("single offset segy")
+
+        i, j = np.sort(np.random.choice(s.xlines, 2, replace=False))
+        x, y = s.offsets[1], s.offsets[3]
+
+        assert_equal_arrays(
+            t.xlines[:, :], segy_gen_to_array(s.xline[:, :]), reshape=True
+        )
+        assert_equal_arrays(
+            t.xlines[:, x:], segy_gen_to_array(s.xline[:, x:]), reshape=True
+        )
+        assert_equal_arrays(
+            t.xlines[:, :y], segy_gen_to_array(s.xline[:, :y]), reshape=True
+        )
+        assert_equal_arrays(
+            t.xlines[:, x:y], segy_gen_to_array(s.xline[:, x:y]), reshape=True
+        )
+
+        assert_equal_arrays(
+            t.xlines[i:, :], segy_gen_to_array(s.xline[i:, :]), reshape=True
+        )
+        assert_equal_arrays(
+            t.xlines[i:, x:], segy_gen_to_array(s.xline[i:, x:]), reshape=True
+        )
+        assert_equal_arrays(
+            t.xlines[i:, :y], segy_gen_to_array(s.xline[i:, :y]), reshape=True
+        )
+        assert_equal_arrays(
+            t.xlines[i:, x:y], segy_gen_to_array(s.xline[i:, x:y]), reshape=True
+        )
+
+        assert_equal_arrays(
+            t.xlines[:j, :], segy_gen_to_array(s.xline[:j, :]), reshape=True
+        )
+        assert_equal_arrays(
+            t.xlines[:j, x:], segy_gen_to_array(s.xline[:j, x:]), reshape=True
+        )
+        assert_equal_arrays(
+            t.xlines[:j, :y], segy_gen_to_array(s.xline[:j, :y]), reshape=True
+        )
+        assert_equal_arrays(
+            t.xlines[:j, x:y], segy_gen_to_array(s.xline[:j, x:y]), reshape=True
+        )
+
+        assert_equal_arrays(
+            t.xlines[i:j, :], segy_gen_to_array(s.xline[i:j, :]), reshape=True
+        )
+        assert_equal_arrays(
+            t.xlines[i:j, x:], segy_gen_to_array(s.xline[i:j, x:]), reshape=True
+        )
+        assert_equal_arrays(
+            t.xlines[i:j, :y], segy_gen_to_array(s.xline[i:j, :y]), reshape=True
+        )
+        assert_equal_arrays(
+            t.xlines[i:j, x:y], segy_gen_to_array(s.xline[i:j, x:y]), reshape=True
+        )
+
 
 class TestStructuredTileSegyDepths:
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
@@ -212,10 +407,17 @@ class TestStructuredTileSegyDepths:
     def test_labels(self, t: StructuredTileSegy, s: SegyFile) -> None:
         assert_equal_arrays(t.depths.labels, np.arange(len(s.samples)))
 
+    @pytest.mark.xfail
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_get_one_line_one_offset(self, t: StructuredTileSegy, s: SegyFile) -> None:
-        i = np.random.randint(len(s.samples))
-        s_depth = s.depth_slice[i]
-        if s.sorting == TraceSortingFormat.CROSSLINE_SORTING:
-            s_depth = s_depth.swapaxes(0, 1)
-        assert_equal_arrays(t.depths[i], s_depth)
+    def test_get_one_line(self, t: StructuredTileSegy, s: SegyFile) -> None:
+        i = np.random.randint(0, len(s.samples))
+        assert_equal_arrays(t.depths[i], s.depth_slice[i])
+
+    @pytest.mark.xfail
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    def test_get_slice_lines(self, t: StructuredTileSegy, s: SegyFile) -> None:
+        i, j = np.sort(np.random.randint(0, len(s.samples), 2))
+        assert_equal_arrays(t.depths[:], segy_gen_to_array(s.depth_slice[:]))
+        assert_equal_arrays(t.depths[i:], segy_gen_to_array(s.depth_slice[i:]))
+        assert_equal_arrays(t.depths[:j], segy_gen_to_array(s.depth_slice[:j]))
+        assert_equal_arrays(t.depths[i:j], segy_gen_to_array(s.depth_slice[i:j]))

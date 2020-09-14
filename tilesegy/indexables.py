@@ -1,4 +1,4 @@
-from typing import Dict, Iterable, Iterator, List, Tuple, Union, cast
+from typing import Dict, List, Tuple, Union, cast
 
 import numpy as np
 import tiledb
@@ -23,7 +23,7 @@ class Header(Sized):
 
     @__getitem__.register(int)
     def _get_one(self, i: int) -> int:
-        return cast(int, np.asscalar(self._tdb[i]))
+        return cast(int, self._tdb[i].item())
 
     @__getitem__.register(slice)
     def _get_many(self, i: slice) -> List[int]:
@@ -82,9 +82,8 @@ class Lines:
         self._labels = labels
         self._offsets = offsets
         self._dim = dimension
-        for a in self._labels, self._offsets:
-            if len(np.unique(a)) != len(a):
-                raise ValueError(f"Array should not contain duplicates: {a}")
+        self._label_indexer = LabelIndexer(self._labels)
+        self._offset_indexer = LabelIndexer(self._offsets)
 
     @property
     def labels(self) -> np.ndarray:
@@ -93,54 +92,76 @@ class Lines:
     def __len__(self) -> int:
         return cast(int, self._data_tdb.shape[self._dim])
 
-    def __getitem__(self, i: Union[int, Tuple[int, int]]) -> np.ndarray:
+    def __getitem__(self, i: Union[Index, Tuple[Index, Index]]) -> np.ndarray:
         if isinstance(i, tuple):
-            label, offset = i
+            labels, offsets = i
         else:
-            label = i
-            offset = self._offsets[0]
+            labels = i
+            offsets = self._offsets[0]
+        label_indices = self._label_indexer[labels]
+        offset_indices = self._offset_indexer[offsets]
+
         composite_idx: List[Index] = [slice(None)] * 4
-        composite_idx[self._dim] = get_index(label, self._labels)
-        composite_idx[2] = get_index(offset, self._offsets)
-        return self._data_tdb[tuple(composite_idx)]
+        composite_idx[self._dim] = label_indices
+        composite_idx[2] = offset_indices
+        data = self._data_tdb[tuple(composite_idx)]
+
+        # TODO: Simplify this logic
+        if isinstance(label_indices, slice) and self._dim != 0:
+            data = data.swapaxes(0, self._dim)
+        if isinstance(offset_indices, slice):
+            if isinstance(label_indices, slice):
+                data = data.swapaxes(1, 2)
+            else:
+                data = data.swapaxes(0, 1)
+
+        return data
 
 
-def get_index(value: np.number, a: np.ndarray) -> int:
-    indices = np.flatnonzero(a == value)
-    assert indices.size <= 1, indices
-    if indices.size == 0:
-        raise ValueError(f"{value} is not in array")
-    return cast(int, indices[0])
+class LabelIndexer:
+    def __init__(self, labels: np.ndarray):
+        if not issubclass(labels.dtype.type, np.integer):
+            raise ValueError("labels should be integers")
+        if len(np.unique(labels)) != len(labels):
+            raise ValueError(f"labels should not contain duplicates: {labels}")
+        self._labels = labels
+        self._min_label = labels.min()
+        self._max_label = labels.max() + 1
+        self._sorter = labels.argsort()
 
+    @singledispatchmethod
+    def __getitem__(self, label: object) -> int:
+        indices = np.flatnonzero(label == self._labels)
+        assert indices.size <= 1, indices
+        if indices.size == 0:
+            raise ValueError(f"{label} is not in labels")
+        return int(indices[0])
 
-class FilteredRange:
-    """Fast filtering of ranges.
-
-    `FilteredRange(members)[start:stop:end]` returns an iterator over the values of
-    `range(start, stop, end)` that are included in `members`.
-
-    If `start` is None, it defaults to `min(members)` if `step` is increasing or `max(members)`
-    if step is decreasing.
-
-    If `stop` is None, it defaults to `max(members)+1` if `step` is increasing or `min(members)-1`
-    if step is decreasing.
-    """
-
-    def __init__(self, members: Iterable[int]):
-        members = set(members)
-        self._min_val = min(members)
-        self._max_val = max(members) + 1
-        self._is_member = members.__contains__
-
-    def __getitem__(self, i: Union[int, slice]) -> Iterator[int]:
-        s = slice(i, i + 1) if not isinstance(i, slice) else i
-        start, stop, step = s.start, s.stop, s.step
-        min_val = self._min_val
+    @__getitem__.register(slice)
+    def _get_slice(self, label_slice: slice) -> slice:
+        start, stop, step = label_slice.start, label_slice.stop, label_slice.step
+        min_label = self._min_label
         if step is None or step > 0:  # increasing step
-            if start is None or start < min_val:
-                start = min_val
+            if start is None or start < min_label:
+                start = min_label
         else:  # decreasing step
-            if stop is None or stop < min_val - 1:
-                stop = min_val - 1
-        start, stop, step = slice(start, stop, step).indices(self._max_val)
-        return filter(self._is_member, range(start, stop, step))
+            if stop is None or stop < min_label - 1:
+                stop = min_label - 1
+
+        label_range = np.arange(*slice(start, stop, step).indices(self._max_label))
+        indices = self._sorter[
+            self._labels.searchsorted(label_range, sorter=self._sorter)
+        ]
+        indices = indices[self._labels[indices] == label_range]
+        if len(indices) == 0:
+            raise ValueError(f"{label_slice} has no overlap with labels")
+
+        start = indices[0]
+        step = indices[1] - start if len(indices) > 1 else 1
+        stop = indices[-1] + (1 if step > 0 else -1)
+        if (np.arange(start, stop, step) != indices).any():
+            raise ValueError(
+                f"Label indices for {label_slice} is not a slice: {indices}"
+            )
+
+        return slice(start, stop, step)
