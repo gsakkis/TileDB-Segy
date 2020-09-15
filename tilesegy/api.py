@@ -5,7 +5,7 @@ from typing import Dict, List, Type, Union
 import numpy as np
 import tiledb
 
-from .indexables import Lines, Traces, tdb_meta_list_to_numpy
+from .indexables import Lines, Traces
 
 
 class TileSegy:
@@ -32,7 +32,7 @@ class TileSegy:
 
     @property
     def samples(self) -> np.ndarray:
-        return tdb_meta_list_to_numpy(self._data, "samples")
+        return self._meta_to_numpy("samples")
 
     @property
     def traces(self) -> Traces:
@@ -53,27 +53,49 @@ class TileSegy:
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({str(self._uri)!r})"
 
+    def _meta_to_numpy(
+        self, meta_key: str, dtype: Union[np.dtype, str, None] = None
+    ) -> np.ndarray:
+        values = self._data.meta[meta_key]
+        if not isinstance(values, tuple):
+            values = (values,)
+        return np.array(values, dtype)
+
 
 class StructuredTileSegy(TileSegy):
     @property
-    def offsets(self) -> np.ndarray:
-        return tdb_meta_list_to_numpy(self._data, "offsets", dtype="intc")
-
-    @property
     def ilines(self) -> Lines:
         return Lines(
-            self._data, self._headers, self.offsets, dimension=0, name="ilines"
+            self._data, self._headers, self._iline_labels, self.offsets, dimension=0
         )
 
     @property
     def xlines(self) -> Lines:
         return Lines(
-            self._data, self._headers, self.offsets, dimension=1, name="xlines"
+            self._data, self._headers, self._xline_labels, self.offsets, dimension=1
         )
 
     @property
     def depths(self) -> Lines:
-        return Lines(self._data, self._headers, self.offsets, dimension=3)
+        return Lines(
+            self._data,
+            self._headers,
+            np.arange(len(self.samples)),
+            self.offsets,
+            dimension=3,
+        )
+
+    @property
+    def offsets(self) -> np.ndarray:
+        return self._meta_to_numpy("offsets", dtype="intc")
+
+    @property
+    def _iline_labels(self) -> np.ndarray:
+        return self._meta_to_numpy("ilines", dtype="intc")
+
+    @property
+    def _xline_labels(self) -> np.ndarray:
+        return self._meta_to_numpy("xlines", dtype="intc")
 
 
 def open(uri: Union[str, Path]) -> TileSegy:

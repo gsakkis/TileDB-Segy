@@ -1,4 +1,4 @@
-from typing import Dict, Iterable, Iterator, List, Optional, Tuple, Union, cast
+from typing import Dict, Iterable, Iterator, List, Tuple, Union, cast
 
 import numpy as np
 import tiledb
@@ -6,15 +6,6 @@ import tiledb
 from ._singledispatchmethod import singledispatchmethod  # type: ignore
 
 Index = Union[int, slice]
-
-
-def tdb_meta_list_to_numpy(
-    tdb: tiledb.Array, meta_key: str, dtype: Union[np.dtype, str, None] = None
-) -> np.ndarray:
-    value = tdb.meta[meta_key]
-    if not isinstance(value, tuple):
-        value = (value,)
-    return np.array(value, dtype)
 
 
 class Sized:
@@ -82,19 +73,15 @@ class Lines:
         self,
         data_tdb: tiledb.Array,
         headers_tdb: tiledb.Array,
+        labels: np.ndarray,
         offsets: np.ndarray,
-        *,
         dimension: int,
-        name: Optional[str] = None,
     ):
         self._data_tdb = data_tdb
         self._headers_tdb = headers_tdb
+        self._labels = labels
         self._offsets = offsets
         self._dim = dimension
-        if name is not None:
-            self._labels = tdb_meta_list_to_numpy(data_tdb, name, dtype="intc")
-        else:
-            self._labels = np.arange(len(self))
         for a in self._labels, self._offsets:
             if len(np.unique(a)) != len(a):
                 raise ValueError(f"Array should not contain duplicates: {a}")
