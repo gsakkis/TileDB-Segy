@@ -33,6 +33,10 @@ def stringify_keys(d: Mapping[int, int]) -> Mapping[str, int]:
 
 class TestTileSegy:
     @parametrize_tilesegy_segyfiles("t", "s")
+    def test_sorting(self, t: TileSegy, s: SegyFile) -> None:
+        assert t.sorting == s.sorting
+
+    @parametrize_tilesegy_segyfiles("t", "s")
     def test_bin(self, t: TileSegy, s: SegyFile) -> None:
         assert t.bin == stringify_keys(s.bin)
 

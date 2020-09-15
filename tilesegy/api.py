@@ -1,8 +1,9 @@
 from pathlib import Path
 from types import TracebackType
-from typing import Dict, List, Type, Union
+from typing import Dict, List, Optional, Type, Union
 
 import numpy as np
+import segyio
 import tiledb
 
 from .indexables import Lines, Traces
@@ -17,6 +18,11 @@ class TileSegy:
     @property
     def uri(self) -> Path:
         return self._uri
+
+    @property
+    def sorting(self) -> Optional[segyio.TraceSortingFormat]:
+        sorting = segyio.TraceSortingFormat(self._data.meta["sorting"])
+        return sorting if sorting != segyio.TraceSortingFormat.UNKNOWN_SORTING else None
 
     @property
     def bin(self) -> Dict[str, int]:

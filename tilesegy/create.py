@@ -160,6 +160,9 @@ class SegyFileConverter(ABC):
 
     @abstractmethod
     def _fill_data(self, tdb: tiledb.Array) -> None:
+        tdb.meta["sorting"] = (
+            self.segy_file.sorting or segyio.TraceSortingFormat.UNKNOWN_SORTING
+        )
         tdb.meta["samples"] = self.segy_file.samples.tolist()
 
 
