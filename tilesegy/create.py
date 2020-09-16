@@ -1,11 +1,10 @@
-__all__ = ["segy_to_tiledb"]
-
 import copy
 import os
 from abc import ABC, abstractmethod
 from collections import namedtuple
 from contextlib import contextmanager
-from typing import Iterable, Iterator, Optional, Union
+from pathlib import Path
+from typing import Any, Iterable, Iterator, Optional, Union, cast
 
 import numpy as np
 import segyio
@@ -40,21 +39,6 @@ TRACE_FIELD_FILTERS = (
 )
 
 
-def segy_to_tiledb(
-    segy_file: segyio.SegyFile,
-    uri: str,
-    *,
-    tile_size: int,
-    config: Optional[tiledb.Config] = None,
-) -> None:
-    cls = (
-        UnstructuredSegyFileConverter
-        if segy_file.unstructured
-        else StructuredSegyFileConverter
-    )
-    cls(segy_file, tile_size, config).to_tiledb(uri)
-
-
 class ExtendedSegyFile(segyio.SegyFile):
 
     trace_size = property(lambda self: len(self._samples) * int(self._dtype.itemsize))
@@ -74,9 +58,18 @@ class ExtendedSegyFile(segyio.SegyFile):
 
 
 class SegyFileConverter(ABC):
+    def __new__(cls, segy_file: segyio.SegyFile, **kwargs: Any) -> "SegyFileConverter":
+        if cls is SegyFileConverter:
+            if segy_file.unstructured:
+                cls = UnstructuredSegyFileConverter
+            else:
+                cls = StructuredSegyFileConverter
+        return cast(SegyFileConverter, super().__new__(cls))
+
     def __init__(
         self,
         segy_file: segyio.SegyFile,
+        *,
         tile_size: int,
         config: Optional[tiledb.Config] = None,
     ):
@@ -87,18 +80,20 @@ class SegyFileConverter(ABC):
         self.tile_size = tile_size
         self.config = config
 
-    def to_tiledb(self, uri: str) -> None:
-        if tiledb.object_type(uri) != "group":
-            tiledb.group_create(uri)
+    def to_tiledb(self, uri: Union[str, Path]) -> None:
+        uri = Path(uri) if not isinstance(uri, Path) else uri
 
-        headers_uri = os.path.join(uri, "headers")
-        if tiledb.object_type(headers_uri) != "array":
-            with self._tiledb_array(headers_uri, self.header_schema) as tdb:
+        if tiledb.object_type(str(uri)) != "group":
+            tiledb.group_create(str(uri))
+
+        headers_uri = uri / "headers"
+        if tiledb.object_type(str(headers_uri)) != "array":
+            with self._tiledb_array(str(headers_uri), self.header_schema) as tdb:
                 self._fill_headers(tdb)
 
-        data_uri = os.path.join(uri, "data")
-        if tiledb.object_type(data_uri) != "array":
-            with self._tiledb_array(data_uri, self.data_schema) as tdb:
+        data_uri = uri / "data"
+        if tiledb.object_type(str(data_uri)) != "array":
+            with self._tiledb_array(str(data_uri), self.data_schema) as tdb:
                 self._fill_data(tdb)
 
     @property
@@ -281,12 +276,11 @@ def main() -> None:
         shutil.rmtree(output_dir)
 
     with segyio.open(segy_file, strict=False) as segy_file:
-        segy_to_tiledb(
+        SegyFileConverter(  # type: ignore
             segy_file,
-            output_dir,
             tile_size=4 * 1024 ** 2,
             config=tiledb.Config({"sm.consolidation.buffer_size": 500000}),
-        )
+        ).to_tiledb(output_dir)
 
 
 if __name__ == "__main__":

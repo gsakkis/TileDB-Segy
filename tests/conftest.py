@@ -9,7 +9,7 @@ from segyio import SegyFile, TraceSortingFormat
 
 import tilesegy
 from tilesegy import TileSegy
-from tilesegy.create import segy_to_tiledb
+from tilesegy.create import SegyFileConverter
 
 from .segyio_utils import generate_structured_segy, generate_unstructured_segy
 
@@ -58,12 +58,11 @@ def iter_segyfiles(structured: Optional[bool] = None) -> Iterator[SegyFile]:
 def get_tilesegy(segy_file: SegyFile) -> TileSegy:
     path = Path(segy_file._filename).with_suffix(".tdb")
     if not path.exists():
-        segy_to_tiledb(
+        SegyFileConverter(  # type: ignore
             segy_file,
-            str(path),
             tile_size=1024 ** 2,
             config=tiledb.Config({"sm.consolidation.buffer_size": 500000}),
-        )
+        ).to_tiledb(path)
     return tilesegy.open(path)
 
 
