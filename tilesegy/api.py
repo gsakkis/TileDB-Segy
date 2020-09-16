@@ -3,8 +3,8 @@ from types import TracebackType
 from typing import Dict, List, Optional, Type, Union
 
 import numpy as np
-import segyio
 import tiledb
+from segyio import TraceSortingFormat
 
 from .indexables import Lines, Traces
 
@@ -20,9 +20,9 @@ class TileSegy:
         return self._uri
 
     @property
-    def sorting(self) -> Optional[segyio.TraceSortingFormat]:
-        sorting = segyio.TraceSortingFormat(self._data.meta["sorting"])
-        return sorting if sorting != segyio.TraceSortingFormat.UNKNOWN_SORTING else None
+    def sorting(self) -> Optional[TraceSortingFormat]:
+        sorting = TraceSortingFormat(self._data.meta["sorting"])
+        return sorting if sorting != TraceSortingFormat.UNKNOWN_SORTING else None
 
     @property
     def bin(self) -> Dict[str, int]:
@@ -78,6 +78,14 @@ class StructuredTileSegy(TileSegy):
         return self._get_lines("xlines", self.xlines)
 
     @property
+    def fast(self) -> Lines:
+        if self.sorting == TraceSortingFormat.INLINE_SORTING:
+            return self.iline
+        if self.sorting == TraceSortingFormat.CROSSLINE_SORTING:
+            return self.xline
+        raise RuntimeError(f"Unknown sorting {self.sorting}")  # pragma: nocover
+
+    @property
     def depth(self) -> Lines:
         return self._get_lines("samples", np.arange(len(self.samples)))
 
@@ -95,16 +103,12 @@ class StructuredTileSegy(TileSegy):
 
     def _get_lines(self, dim_name: str, labels: np.ndarray) -> Lines:
         return Lines(
-            data_tdb=self._data,
-            headers_tdb=self._headers,
+            dim_name=dim_name,
             labels=labels,
-            labels_axis=next(
-                i
-                for i, dim in enumerate(self._data.schema.domain)
-                if dim.name == dim_name
-            ),
             offsets=self.offsets,
             offsets_axis=1,
+            data_tdb=self._data,
+            headers_tdb=self._headers,
         )
 
 

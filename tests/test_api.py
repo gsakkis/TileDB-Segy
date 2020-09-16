@@ -185,6 +185,14 @@ class TestStructuredTileSegy:
     def test_xlines(self, t: StructuredTileSegy, s: SegyFile) -> None:
         assert_equal_arrays(t.xlines, s.xlines)
 
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    def test_fast(self, t: StructuredTileSegy, s: SegyFile) -> None:
+        if s.fast is s.iline:
+            assert str(t.fast) == "Lines('ilines')"
+        else:
+            assert s.fast is s.xline
+            assert str(t.fast) == "Lines('xlines')"
+
 
 class TestStructuredTileSegyIlines:
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)

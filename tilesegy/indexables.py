@@ -71,20 +71,26 @@ class Traces:
 class Lines:
     def __init__(
         self,
-        data_tdb: tiledb.Array,
-        headers_tdb: tiledb.Array,
+        dim_name: str,
         labels: np.ndarray,
-        labels_axis: int,
         offsets: np.ndarray,
         offsets_axis: int,
+        data_tdb: tiledb.Array,
+        headers_tdb: tiledb.Array,
     ):
+        self._name = dim_name
+        self._labels_axis = next(
+            i for i, dim in enumerate(data_tdb.schema.domain) if dim.name == dim_name
+        )
+        self._label_indexer = LabelIndexer(labels)
+        self._offset_indexer = LabelIndexer(offsets)
+        self._default_offset = offsets[0]
+        self._offsets_axis = offsets_axis
         self._data_tdb = data_tdb
         self._headers_tdb = headers_tdb
-        self._label_indexer = LabelIndexer(labels)
-        self._labels_axis = labels_axis
-        self._offset_indexer = LabelIndexer(offsets)
-        self._offsets_axis = offsets_axis
-        self._default_offset = offsets[0]
+
+    def __str__(self) -> str:
+        return f"Lines({self._name!r})"
 
     def __len__(self) -> int:
         return cast(int, self._data_tdb.shape[self._labels_axis])
