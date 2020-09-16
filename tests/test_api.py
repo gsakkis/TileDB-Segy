@@ -422,7 +422,9 @@ class TestStructuredTileSegyDepths:
 
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
     def test_get_slice_lines(self, t: StructuredTileSegy, s: SegyFile) -> None:
-        i, j = np.sort(np.random.randint(0, len(s.samples), 2))
+        i = np.random.randint(0, len(s.samples) // 2)
+        j = np.random.randint(i + 1, len(s.samples))
+
         assert_equal_arrays(t.depth[:], segy_gen_to_array(s.depth_slice[:]))
         assert_equal_arrays(t.depth[i:], segy_gen_to_array(s.depth_slice[i:]))
         assert_equal_arrays(t.depth[:j], segy_gen_to_array(s.depth_slice[:j]))

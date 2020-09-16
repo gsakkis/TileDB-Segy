@@ -74,23 +74,18 @@ class Lines:
         dim_name: str,
         labels: np.ndarray,
         offsets: np.ndarray,
-        offsets_axis: int,
         data_tdb: tiledb.Array,
         headers_tdb: tiledb.Array,
     ):
-        self._name = dim_name
-        self._labels_axis = next(
-            i for i, dim in enumerate(data_tdb.schema.domain) if dim.name == dim_name
-        )
+        self._dim_name = dim_name
         self._label_indexer = LabelIndexer(labels)
         self._offset_indexer = LabelIndexer(offsets)
         self._default_offset = offsets[0]
-        self._offsets_axis = offsets_axis
         self._data_tdb = data_tdb
         self._headers_tdb = headers_tdb
 
     def __str__(self) -> str:
-        return f"Lines({self._name!r})"
+        return f"Lines({self._dim_name!r})"
 
     def __len__(self) -> int:
         return cast(int, self._data_tdb.shape[self._labels_axis])
@@ -113,19 +108,33 @@ class Lines:
         composite_index[offsets_axis] = offset_indices
         data = self._data_tdb[tuple(composite_index)]
 
-        # TODO: Simplify and/or comment this logic
-        if multi_labels:
-            if not multi_offsets and labels_axis > offsets_axis:
-                labels_axis -= 1
-            if labels_axis > 0:
-                data = data.swapaxes(0, labels_axis)
+        # TODO: Simplify and/or comment the swap axes logic
+        if multi_labels and multi_offsets:
+            major_axis = labels_axis
+        elif multi_labels:
+            major_axis = labels_axis - int(labels_axis > offsets_axis)
         elif multi_offsets:
-            if offsets_axis > labels_axis:
-                offsets_axis -= 1
-            if offsets_axis > 0:
-                data = data.swapaxes(0, offsets_axis)
+            major_axis = offsets_axis - int(offsets_axis > labels_axis)
+        else:
+            major_axis = 0
+
+        if major_axis > 0:
+            data = data.swapaxes(0, major_axis)
+
+        # for multiple depths need to do an extra swap: (slow, fast) -> (fast, slow)
+        if self._dim_name == "samples" and multi_labels:
+            data = data.swapaxes(-1, -2)
 
         return data
+
+    _offsets_axis = property(lambda self: 1)
+    _labels_axis = property(
+        lambda self: next(
+            i
+            for i, dim in enumerate(self._data_tdb.schema.domain)
+            if dim.name == self._dim_name
+        )
+    )
 
 
 class LabelIndexer:

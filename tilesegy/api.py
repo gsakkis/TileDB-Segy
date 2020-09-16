@@ -106,7 +106,6 @@ class StructuredTileSegy(TileSegy):
             dim_name=dim_name,
             labels=labels,
             offsets=self.offsets,
-            offsets_axis=1,
             data_tdb=self._data,
             headers_tdb=self._headers,
         )
