@@ -41,7 +41,7 @@ class TileSegy:
         return self._meta_to_numpy("samples")
 
     @property
-    def traces(self) -> Traces:
+    def trace(self) -> Traces:
         return Traces(self._data, self._headers)
 
     def close(self) -> None:
@@ -70,15 +70,15 @@ class TileSegy:
 
 class StructuredTileSegy(TileSegy):
     @property
-    def ilines(self) -> Lines:
-        return self._get_lines("ilines", self._iline_labels)
+    def iline(self) -> Lines:
+        return self._get_lines("ilines", self.ilines)
 
     @property
-    def xlines(self) -> Lines:
-        return self._get_lines("xlines", self._xline_labels)
+    def xline(self) -> Lines:
+        return self._get_lines("xlines", self.xlines)
 
     @property
-    def depths(self) -> Lines:
+    def depth(self) -> Lines:
         return self._get_lines("samples", np.arange(len(self.samples)))
 
     @property
@@ -86,11 +86,11 @@ class StructuredTileSegy(TileSegy):
         return self._meta_to_numpy("offsets", dtype="intc")
 
     @property
-    def _iline_labels(self) -> np.ndarray:
+    def ilines(self) -> np.ndarray:
         return self._meta_to_numpy("ilines", dtype="intc")
 
     @property
-    def _xline_labels(self) -> np.ndarray:
+    def xlines(self) -> np.ndarray:
         return self._meta_to_numpy("xlines", dtype="intc")
 
     def _get_lines(self, dim_name: str, labels: np.ndarray) -> Lines:

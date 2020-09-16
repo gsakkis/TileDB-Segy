@@ -80,16 +80,11 @@ class Lines:
     ):
         self._data_tdb = data_tdb
         self._headers_tdb = headers_tdb
-        self._labels = labels
+        self._label_indexer = LabelIndexer(labels)
         self._labels_axis = labels_axis
-        self._offsets = offsets
+        self._offset_indexer = LabelIndexer(offsets)
         self._offsets_axis = offsets_axis
-        self._label_indexer = LabelIndexer(self._labels)
-        self._offset_indexer = LabelIndexer(self._offsets)
-
-    @property
-    def labels(self) -> np.ndarray:
-        return self._labels
+        self._default_offset = offsets[0]
 
     def __len__(self) -> int:
         return cast(int, self._data_tdb.shape[self._labels_axis])
@@ -98,7 +93,7 @@ class Lines:
         if isinstance(i, tuple):
             labels, offsets = i
         else:
-            labels, offsets = i, self._offsets[0]
+            labels, offsets = i, self._default_offset
 
         label_indices = self._label_indexer[labels]
         multi_labels = isinstance(label_indices, slice)
