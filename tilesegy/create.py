@@ -5,7 +5,7 @@ import os
 from abc import ABC, abstractmethod
 from collections import namedtuple
 from contextlib import contextmanager
-from typing import Dict, Iterable, Iterator, Optional, Type, Union
+from typing import Iterable, Iterator, Optional, Union
 
 import numpy as np
 import segyio
@@ -47,18 +47,11 @@ def segy_to_tiledb(
     tile_size: int,
     config: Optional[tiledb.Config] = None,
 ) -> None:
-    if not isinstance(segy_file, ExtendedSegyFile):
-        segy_file = copy.copy(segy_file)
-        segy_file.__class__ = ExtendedSegyFile
-
-    cls: Type[SegyFileConverter]
-    if segy_file.sorting == segyio.TraceSortingFormat.INLINE_SORTING:
-        cls = InlineSegyFileConverter
-    elif segy_file.sorting == segyio.TraceSortingFormat.CROSSLINE_SORTING:
-        cls = CrosslineSegyFileConverter
-    else:
-        cls = UnstructuredSegyFileConverter
-
+    cls = (
+        UnstructuredSegyFileConverter
+        if segy_file.unstructured
+        else StructuredSegyFileConverter
+    )
     cls(segy_file, tile_size, config).to_tiledb(uri)
 
 
@@ -66,17 +59,13 @@ class ExtendedSegyFile(segyio.SegyFile):
 
     trace_size = property(lambda self: len(self._samples) * int(self._dtype.itemsize))
     fast_headerline = property(
-        lambda self: self._header.iline if self._is_inline else self._header.xline
+        lambda self: self._header.iline if self.is_inline else self._header.xline
     )
-    fast_lines = property(
-        lambda self: self._ilines if self._is_inline else self._xlines
-    )
-    slow_lines = property(
-        lambda self: self._xlines if self._is_inline else self._ilines
-    )
+    fast_lines = property(lambda self: self._ilines if self.is_inline else self._xlines)
+    slow_lines = property(lambda self: self._xlines if self.is_inline else self._ilines)
 
     @property
-    def _is_inline(self) -> bool:
+    def is_inline(self) -> bool:
         if self.sorting == segyio.TraceSortingFormat.INLINE_SORTING:
             return True
         if self.sorting == segyio.TraceSortingFormat.CROSSLINE_SORTING:
@@ -87,10 +76,13 @@ class ExtendedSegyFile(segyio.SegyFile):
 class SegyFileConverter(ABC):
     def __init__(
         self,
-        segy_file: ExtendedSegyFile,
+        segy_file: segyio.SegyFile,
         tile_size: int,
         config: Optional[tiledb.Config] = None,
     ):
+        if not isinstance(segy_file, ExtendedSegyFile):
+            segy_file = copy.copy(segy_file)
+            segy_file.__class__ = ExtendedSegyFile
         self.segy_file = segy_file
         self.tile_size = tile_size
         self.config = config
@@ -206,29 +198,27 @@ class UnstructuredSegyFileConverter(SegyFileConverter):
 
 class StructuredSegyFileConverter(SegyFileConverter):
     def _get_dims(self, trace_size: int) -> Iterable[tiledb.Dim]:
-        tiles = [self._fast_tile(trace_size), len(self.segy_file.slow_lines)]
-        if self.segy_file.fast is self.segy_file.xline:
-            tiles.reverse()
-        itile, xtile = tiles
         dtype = np.uintc
+        slow_lines = len(self.segy_file.slow_lines)
+        if self.segy_file.is_inline:
+            fast_dim, slow_dim = "ilines", "xlines"
+        else:
+            fast_dim, slow_dim = "xlines", "ilines"
         return [
             tiledb.Dim(
-                name="ilines",
-                domain=(0, len(self.segy_file.ilines) - 1),
+                name=fast_dim,
+                domain=(0, len(self.segy_file.fast_lines) - 1),
                 dtype=dtype,
-                tile=itile,
-            ),
-            tiledb.Dim(
-                name="xlines",
-                domain=(0, len(self.segy_file.xlines) - 1),
-                dtype=dtype,
-                tile=xtile,
+                tile=self._fast_tile(trace_size),
             ),
             tiledb.Dim(
                 name="offsets",
                 domain=(0, len(self.segy_file.offsets) - 1),
                 dtype=dtype,
                 tile=1,
+            ),
+            tiledb.Dim(
+                name=slow_dim, domain=(0, slow_lines - 1), dtype=dtype, tile=slow_lines,
             ),
         ]
 
@@ -252,8 +242,7 @@ class StructuredSegyFileConverter(SegyFileConverter):
                             v = getfield(buf, key)
                             if v:
                                 cube[i, j] = v
-                attr_cubes = dict(zip(TRACE_FIELD_NAMES, cubes))
-                self._fill_header_slice(tdb, sl, offset_idx, attr_cubes)
+                tdb[sl, offset_idx] = dict(zip(TRACE_FIELD_NAMES, cubes))
 
     def _fill_data(self, tdb: tiledb.Array) -> None:
         super()._fill_data(tdb)
@@ -266,63 +255,13 @@ class StructuredSegyFileConverter(SegyFileConverter):
         for offset_idx, offset in enumerate(self.segy_file.offsets):
             for sl in iter_slices(len(fast_lines), step):
                 cube = np.stack([get_line[i, offset] for i in fast_lines[sl]])
-                self._fill_data_slice(tdb, sl, offset_idx, cube)
+                tdb[sl, offset_idx] = cube
 
     def _fast_tile(self, trace_size: int) -> int:
         num_fast, num_slow = map(
             len, (self.segy_file.fast_lines, self.segy_file.slow_lines)
         )
         return int(np.clip(self.tile_size // (num_slow * trace_size), 1, num_fast))
-
-    @abstractmethod
-    def _fill_header_slice(
-        self,
-        tdb: tiledb.Array,
-        fast_slice: slice,
-        offset_idx: int,
-        attr_cubes: Dict[str, np.ndarray],
-    ) -> None:
-        ...
-
-    @abstractmethod
-    def _fill_data_slice(
-        self, tdb: tiledb.Array, fast_slice: slice, offset_idx: int, cube: np.ndarray
-    ) -> None:
-        ...
-
-
-class InlineSegyFileConverter(StructuredSegyFileConverter):
-    def _fill_header_slice(
-        self,
-        tdb: tiledb.Array,
-        fast_slice: slice,
-        offset_idx: int,
-        attr_cubes: Dict[str, np.ndarray],
-    ) -> None:
-        tdb[fast_slice, :, offset_idx] = attr_cubes
-
-    def _fill_data_slice(
-        self, tdb: tiledb.Array, fast_slice: slice, offset_idx: int, cube: np.ndarray
-    ) -> None:
-        tdb[fast_slice, :, offset_idx] = cube
-
-
-class CrosslineSegyFileConverter(StructuredSegyFileConverter):
-    def _fill_header_slice(
-        self,
-        tdb: tiledb.Array,
-        fast_slice: slice,
-        offset_idx: int,
-        attr_cubes: Dict[str, np.ndarray],
-    ) -> None:
-        for k, v in attr_cubes.items():
-            attr_cubes[k] = v.swapaxes(0, 1)
-        tdb[:, fast_slice, offset_idx] = attr_cubes
-
-    def _fill_data_slice(
-        self, tdb: tiledb.Array, fast_slice: slice, offset_idx: int, cube: np.ndarray
-    ) -> None:
-        tdb[:, fast_slice, offset_idx] = cube.swapaxes(0, 1)
 
 
 def iter_slices(size: int, step: int) -> Iterator[slice]:

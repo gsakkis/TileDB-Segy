@@ -411,13 +411,11 @@ class TestStructuredTileSegyDepths:
     def test_labels(self, t: StructuredTileSegy, s: SegyFile) -> None:
         assert_equal_arrays(t.depths.labels, np.arange(len(s.samples)))
 
-    @pytest.mark.xfail
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
     def test_get_one_line(self, t: StructuredTileSegy, s: SegyFile) -> None:
         i = np.random.randint(0, len(s.samples))
         assert_equal_arrays(t.depths[i], s.depth_slice[i])
 
-    @pytest.mark.xfail
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
     def test_get_slice_lines(self, t: StructuredTileSegy, s: SegyFile) -> None:
         i, j = np.sort(np.random.randint(0, len(s.samples), 2))

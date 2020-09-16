@@ -71,25 +71,15 @@ class TileSegy:
 class StructuredTileSegy(TileSegy):
     @property
     def ilines(self) -> Lines:
-        return Lines(
-            self._data, self._headers, self._iline_labels, self.offsets, dimension=0
-        )
+        return self._get_lines("ilines", self._iline_labels)
 
     @property
     def xlines(self) -> Lines:
-        return Lines(
-            self._data, self._headers, self._xline_labels, self.offsets, dimension=1
-        )
+        return self._get_lines("xlines", self._xline_labels)
 
     @property
     def depths(self) -> Lines:
-        return Lines(
-            self._data,
-            self._headers,
-            np.arange(len(self.samples)),
-            self.offsets,
-            dimension=3,
-        )
+        return self._get_lines("samples", np.arange(len(self.samples)))
 
     @property
     def offsets(self) -> np.ndarray:
@@ -102,6 +92,20 @@ class StructuredTileSegy(TileSegy):
     @property
     def _xline_labels(self) -> np.ndarray:
         return self._meta_to_numpy("xlines", dtype="intc")
+
+    def _get_lines(self, dim_name: str, labels: np.ndarray) -> Lines:
+        return Lines(
+            data_tdb=self._data,
+            headers_tdb=self._headers,
+            labels=labels,
+            labels_axis=next(
+                i
+                for i, dim in enumerate(self._data.schema.domain)
+                if dim.name == dim_name
+            ),
+            offsets=self.offsets,
+            offsets_axis=1,
+        )
 
 
 def open(uri: Union[str, Path]) -> TileSegy:

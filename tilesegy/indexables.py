@@ -74,14 +74,16 @@ class Lines:
         data_tdb: tiledb.Array,
         headers_tdb: tiledb.Array,
         labels: np.ndarray,
+        labels_axis: int,
         offsets: np.ndarray,
-        dimension: int,
+        offsets_axis: int,
     ):
         self._data_tdb = data_tdb
         self._headers_tdb = headers_tdb
         self._labels = labels
+        self._labels_axis = labels_axis
         self._offsets = offsets
-        self._dim = dimension
+        self._offsets_axis = offsets_axis
         self._label_indexer = LabelIndexer(self._labels)
         self._offset_indexer = LabelIndexer(self._offsets)
 
@@ -90,30 +92,37 @@ class Lines:
         return self._labels
 
     def __len__(self) -> int:
-        return cast(int, self._data_tdb.shape[self._dim])
+        return cast(int, self._data_tdb.shape[self._labels_axis])
 
     def __getitem__(self, i: Union[Index, Tuple[Index, Index]]) -> np.ndarray:
         if isinstance(i, tuple):
             labels, offsets = i
         else:
-            labels = i
-            offsets = self._offsets[0]
+            labels, offsets = i, self._offsets[0]
+
         label_indices = self._label_indexer[labels]
+        multi_labels = isinstance(label_indices, slice)
         offset_indices = self._offset_indexer[offsets]
+        multi_offsets = isinstance(offset_indices, slice)
 
-        composite_idx: List[Index] = [slice(None)] * 4
-        composite_idx[self._dim] = label_indices
-        composite_idx[2] = offset_indices
-        data = self._data_tdb[tuple(composite_idx)]
+        labels_axis = self._labels_axis
+        offsets_axis = self._offsets_axis
+        composite_index: List[Index] = [slice(None)] * 4
+        composite_index[labels_axis] = label_indices
+        composite_index[offsets_axis] = offset_indices
+        data = self._data_tdb[tuple(composite_index)]
 
-        # TODO: Simplify this logic
-        if isinstance(label_indices, slice) and self._dim != 0:
-            data = data.swapaxes(0, self._dim)
-        if isinstance(offset_indices, slice):
-            if isinstance(label_indices, slice):
-                data = data.swapaxes(1, 2)
-            else:
-                data = data.swapaxes(0, 1)
+        # TODO: Simplify and/or comment this logic
+        if multi_labels:
+            if not multi_offsets and labels_axis > offsets_axis:
+                labels_axis -= 1
+            if labels_axis > 0:
+                data = data.swapaxes(0, labels_axis)
+        elif multi_offsets:
+            if offsets_axis > labels_axis:
+                offsets_axis -= 1
+            if offsets_axis > 0:
+                data = data.swapaxes(0, offsets_axis)
 
         return data
 
