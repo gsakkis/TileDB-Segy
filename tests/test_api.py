@@ -1,5 +1,6 @@
 import itertools as it
-from typing import Iterator, Mapping, Tuple
+from operator import attrgetter
+from typing import Any, Callable, Iterator, Mapping, Tuple
 
 import numpy as np
 import pytest
@@ -156,14 +157,6 @@ class TestStructuredTileSegy:
         assert_equal_arrays(t.offsets, s.offsets)
 
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_ilines(self, t: StructuredTileSegy, s: SegyFile) -> None:
-        assert_equal_arrays(t.ilines, s.ilines)
-
-    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_xlines(self, t: StructuredTileSegy, s: SegyFile) -> None:
-        assert_equal_arrays(t.xlines, s.xlines)
-
-    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
     def test_fast(self, t: StructuredTileSegy, s: SegyFile) -> None:
         if s.fast is s.iline:
             assert str(t.fast) == "Lines('ilines')"
@@ -172,101 +165,95 @@ class TestStructuredTileSegy:
             assert str(t.fast) == "Lines('xlines')"
 
 
-class TestStructuredTileSegyIlines:
-    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_len(self, t: StructuredTileSegy, s: SegyFile) -> None:
-        assert len(t.iline) == len(s.iline)
+def parametrize_line_getters(line_getter_name: str, lines_getter_name: str) -> Any:
+    argnames = (line_getter_name, lines_getter_name)
+    argvalues = [
+        (attrgetter("iline"), attrgetter("ilines")),
+        (attrgetter("xline"), attrgetter("xlines")),
+    ]
+    return pytest.mark.parametrize(argnames, argvalues, ids=["ilines", "xlines"])
 
-    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_get_one_line_one_offset(self, t: StructuredTileSegy, s: SegyFile) -> None:
-        i = np.random.choice(s.ilines)
-        x = np.random.choice(s.offsets)
-        assert_equal_arrays(t.iline[i], s.iline[i])
-        assert_equal_arrays(t.iline[i, x], s.iline[i, x])
 
+class TestStructuredTileSegyLines:
+    @pytest.mark.parametrize("lines", ["ilines", "xlines"])
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_get_slice_lines_one_offset(
-        self, t: StructuredTileSegy, s: SegyFile
+    def test_lines(self, lines: str, t: StructuredTileSegy, s: SegyFile) -> None:
+        assert_equal_arrays(getattr(t, lines), getattr(s, lines))
+
+    @pytest.mark.parametrize("line", ["iline", "xline"])
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    def test_len(self, line: str, t: StructuredTileSegy, s: SegyFile) -> None:
+        assert len(getattr(t, line)) == len(getattr(s, line))
+
+    @parametrize_line_getters("get_line", "get_lines")
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    def test_get_one_line_one_offset(
+        self,
+        get_line: Callable[[Any], Any],
+        get_lines: Callable[[Any], np.ndarray],
+        t: StructuredTileSegy,
+        s: SegyFile,
     ) -> None:
-        i, j = np.sort(np.random.choice(s.ilines, 2, replace=False))
+        i = np.random.choice(get_lines(s))
         x = np.random.choice(s.offsets)
-        for sl in iter_slices(i, j):
-            assert_equal_arrays(t.iline[sl], segy_gen_to_array(s.iline[sl]))
-            assert_equal_arrays(t.iline[sl, x], segy_gen_to_array(s.iline[sl, x]))
+        assert_equal_arrays(get_line(t)[i], get_line(s)[i])
+        assert_equal_arrays(get_line(t)[i, x], get_line(s)[i, x])
 
+    @parametrize_line_getters("get_line", "get_lines")
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
     def test_get_one_line_slice_offsets(
-        self, t: StructuredTileSegy, s: SegyFile
+        self,
+        get_line: Callable[[Any], Any],
+        get_lines: Callable[[Any], np.ndarray],
+        t: StructuredTileSegy,
+        s: SegyFile,
     ) -> None:
         if len(s.offsets) == 1:
             pytest.skip("single offset segy")
 
-        i = np.random.choice(s.ilines)
+        i = np.random.choice(get_lines(s))
         x, y = s.offsets[1], s.offsets[3]
         for sl in iter_slices(x, y):
-            assert_equal_arrays(t.iline[i, sl], segy_gen_to_array(s.iline[i, sl]))
-
-    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_get_slice_lines_slice_offsets(
-        self, t: StructuredTileSegy, s: SegyFile
-    ) -> None:
-        if len(s.offsets) == 1:
-            pytest.skip("single offset segy")
-
-        i, j = np.sort(np.random.choice(s.ilines, 2, replace=False))
-        x, y = s.offsets[1], s.offsets[3]
-        for sl1, sl2 in iter_slice_pairs(i, j, x, y):
             assert_equal_arrays(
-                t.iline[sl1, sl2], segy_gen_to_array(s.iline[sl1, sl2]), reshape=True
+                get_line(t)[i, sl], segy_gen_to_array(get_line(s)[i, sl])
             )
 
-
-class TestStructuredTileSegyXlines:
-    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_len(self, t: StructuredTileSegy, s: SegyFile) -> None:
-        assert len(t.xline) == len(s.xline)
-
-    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_get_one_line_one_offset(self, t: StructuredTileSegy, s: SegyFile) -> None:
-        i = np.random.choice(s.xlines)
-        x = np.random.choice(s.offsets)
-        assert_equal_arrays(t.xline[i], s.xline[i])
-        assert_equal_arrays(t.xline[i, x], s.xline[i, x])
-
+    @parametrize_line_getters("get_line", "get_lines")
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
     def test_get_slice_lines_one_offset(
-        self, t: StructuredTileSegy, s: SegyFile
+        self,
+        get_line: Callable[[Any], Any],
+        get_lines: Callable[[Any], np.ndarray],
+        t: StructuredTileSegy,
+        s: SegyFile,
     ) -> None:
-        i, j = np.sort(np.random.choice(s.xlines, 2, replace=False))
+        i, j = np.sort(np.random.choice(get_lines(s), 2, replace=False))
         x = np.random.choice(s.offsets)
         for sl in iter_slices(i, j):
-            assert_equal_arrays(t.xline[sl], segy_gen_to_array(s.xline[sl]))
-            assert_equal_arrays(t.xline[sl, x], segy_gen_to_array(s.xline[sl, x]))
+            assert_equal_arrays(get_line(t)[sl], segy_gen_to_array(get_line(s)[sl]))
+            assert_equal_arrays(
+                get_line(t)[sl, x], segy_gen_to_array(get_line(s)[sl, x])
+            )
 
-    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_get_one_line_slice_offsets(
-        self, t: StructuredTileSegy, s: SegyFile
-    ) -> None:
-        if len(s.offsets) == 1:
-            pytest.skip("single offset segy")
-
-        i = np.random.choice(s.xlines)
-        x, y = s.offsets[1], s.offsets[3]
-        for sl in iter_slices(x, y):
-            assert_equal_arrays(t.xline[i, sl], segy_gen_to_array(s.xline[i, sl]))
-
+    @parametrize_line_getters("get_line", "get_lines")
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
     def test_get_slice_lines_slice_offsets(
-        self, t: StructuredTileSegy, s: SegyFile
+        self,
+        get_line: Callable[[Any], Any],
+        get_lines: Callable[[Any], np.ndarray],
+        t: StructuredTileSegy,
+        s: SegyFile,
     ) -> None:
         if len(s.offsets) == 1:
             pytest.skip("single offset segy")
 
-        i, j = np.sort(np.random.choice(s.xlines, 2, replace=False))
+        i, j = np.sort(np.random.choice(get_lines(s), 2, replace=False))
         x, y = s.offsets[1], s.offsets[3]
         for sl1, sl2 in iter_slice_pairs(i, j, x, y):
             assert_equal_arrays(
-                t.xline[sl1, sl2], segy_gen_to_array(s.xline[sl1, sl2]), reshape=True
+                get_line(t)[sl1, sl2],
+                segy_gen_to_array(get_line(s)[sl1, sl2]),
+                reshape=True,
             )
 
 
