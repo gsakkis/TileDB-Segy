@@ -1,4 +1,5 @@
-from typing import Dict, List, Tuple, Union, cast
+from abc import ABC, abstractmethod
+from typing import Any, Dict, List, Tuple, Union, cast
 
 import numpy as np
 import tiledb
@@ -8,15 +9,23 @@ from ._singledispatchmethod import singledispatchmethod  # type: ignore
 Index = Union[int, slice]
 
 
-class Sized:
+class Indexable(ABC):
+    @abstractmethod
+    def __len__(self) -> int:
+        ...  # pragma: nocover
+
+    @abstractmethod
+    def __getitem__(self, i: Index) -> Any:
+        ...  # pragma: nocover
+
+
+class Header(Indexable):
     def __init__(self, tdb: tiledb.Array):
         self._tdb = tdb
 
     def __len__(self) -> int:
         return len(self._tdb)
 
-
-class Header(Sized):
     @singledispatchmethod
     def __getitem__(self, i: object) -> None:
         raise NotImplementedError(f"Cannot index by {i.__class__}")  # pragma: nocover
@@ -30,7 +39,13 @@ class Header(Sized):
         return cast(List[int], self._tdb[i].tolist())
 
 
-class Headers(Sized):
+class Headers(Indexable):
+    def __init__(self, tdb: tiledb.Array):
+        self._tdb = tdb
+
+    def __len__(self) -> int:
+        return len(self._tdb)
+
     @singledispatchmethod
     def __getitem__(self, i: object) -> None:
         raise NotImplementedError(f"Cannot index by {i.__class__}")  # pragma: nocover
@@ -47,48 +62,60 @@ class Headers(Sized):
         return [dict(zip(keys, row)) for row in zip(*columns)]
 
 
-class Traces:
-    def __init__(self, data_tdb: tiledb.Array, headers_tdb: tiledb.Array):
-        self._data_tdb = data_tdb
-        self._headers_tdb = headers_tdb
+class TraceDepth(Indexable):
+    def __init__(self, tdb: tiledb.Array):
+        self._tdb = tdb
 
     def __len__(self) -> int:
-        return len(self._data_tdb)
+        return cast(int, self._tdb.shape[1])
+
+    def __getitem__(self, i: Index) -> np.ndarray:
+        data = self._tdb[:, i]
+        return data.swapaxes(0, 1) if data.ndim == 2 else data
+
+
+class Traces(Indexable):
+    def __init__(self, data: tiledb.Array, headers: tiledb.Array):
+        self._data = data
+        self._headers = headers
+
+    def __len__(self) -> int:
+        return cast(int, self._data.shape[0])
 
     def __getitem__(
         self, i: Union[Index, Tuple[Index, Index]]
     ) -> Union[np.number, np.ndarray]:
-        return self._data_tdb[i]
+        return self._data[i]
 
     @property
     def headers(self) -> Headers:
-        return Headers(self._headers_tdb)
+        return Headers(self._headers)
 
     def header(self, name: str) -> Header:
-        return Header(tiledb.DenseArray(self._headers_tdb.uri, attr=name))
+        return Header(tiledb.DenseArray(self._headers.uri, attr=name))
 
 
-class Lines:
+class Lines(Indexable):
     def __init__(
         self,
         dim_name: str,
         labels: np.ndarray,
         offsets: np.ndarray,
-        data_tdb: tiledb.Array,
-        headers_tdb: tiledb.Array,
+        data: tiledb.Array,
+        headers: tiledb.Array,
     ):
         self._dim_name = dim_name
         self._label_indexer = LabelIndexer(labels)
         self._offset_indexer = LabelIndexer(offsets)
         self._default_offset = offsets[0]
-        self._data_tdb = data_tdb
-        self._headers_tdb = headers_tdb
+        self._data = data
+        self._headers = headers
 
     def __str__(self) -> str:
         return f"Lines({self._dim_name!r})"
 
     def __len__(self) -> int:
-        return cast(int, self._data_tdb.shape[self._labels_axis])
+        return cast(int, self._data.shape[self._labels_axis])
 
     def __getitem__(self, i: Union[Index, Tuple[Index, Index]]) -> np.ndarray:
         if isinstance(i, tuple):
@@ -106,7 +133,7 @@ class Lines:
         composite_index: List[Index] = [slice(None)] * 4
         composite_index[labels_axis] = label_indices
         composite_index[offsets_axis] = offset_indices
-        data = self._data_tdb[tuple(composite_index)]
+        data = self._data[tuple(composite_index)]
 
         # TODO: Simplify and/or comment the swap axes logic
         if multi_labels and multi_offsets:
@@ -131,7 +158,7 @@ class Lines:
     _labels_axis = property(
         lambda self: next(
             i
-            for i, dim in enumerate(self._data_tdb.schema.domain)
+            for i, dim in enumerate(self._data.schema.domain)
             if dim.name == self._dim_name
         )
     )

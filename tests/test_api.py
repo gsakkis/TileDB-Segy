@@ -71,12 +71,15 @@ class TestTileSegy:
         with pytest.raises(TileDBError):
             t2.bin
 
-    @parametrize_tilesegys("t", structured=False)
-    def test_repr(self, t: TileSegy) -> None:
-        assert repr(t) == f"TileSegy('{str(t.uri)}')"
+    @parametrize_tilesegy_segyfiles("t", "s")
+    def test_repr(self, t: TileSegy, s: SegyFile) -> None:
+        if s.unstructured:
+            assert repr(t) == f"TileSegy('{str(t.uri)}')"
+        else:
+            assert repr(t) == f"StructuredTileSegy('{str(t.uri)}')"
 
 
-class TestTileSegyTraces:
+class TestTileSegyTrace:
     @parametrize_tilesegy_segyfiles("t", "s", structured=False)
     def test_len(self, t: TileSegy, s: SegyFile) -> None:
         assert len(t.trace) == len(s.trace) == s.tracecount
@@ -126,11 +129,23 @@ class TestTileSegyTraces:
             assert t_attrs[sl] == s_attrs[sl].tolist()
 
 
-class TestStructuredTileSegy:
-    @parametrize_tilesegys("t", structured=True)
-    def test_repr(self, t: StructuredTileSegy) -> None:
-        assert repr(t) == f"StructuredTileSegy('{str(t.uri)}')"
+class TestTileSegyDepth:
+    @parametrize_tilesegy_segyfiles("t", "s")
+    def test_len(self, t: StructuredTileSegy, s: SegyFile) -> None:
+        assert len(t.depth) == len(s.depth_slice)
 
+    @parametrize_tilesegy_segyfiles("t", "s")
+    def test_get(self, t: StructuredTileSegy, s: SegyFile) -> None:
+        i = np.random.randint(0, len(s.samples) // 2)
+        j = np.random.randint(i + 1, len(s.samples))
+        # one depth
+        assert_equal_arrays(t.depth[i], s.depth_slice[i])
+        # slice depths
+        for sl in iter_slices(i, j):
+            assert_equal_arrays(t.depth[sl], segy_gen_to_array(s.depth_slice[sl]))
+
+
+class TestStructuredTileSegy:
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
     def test_offsets(self, t: StructuredTileSegy, s: SegyFile) -> None:
         assert_equal_arrays(t.offsets, s.offsets)
@@ -181,19 +196,3 @@ class TestStructuredTileSegy:
                 assert_equal_arrays(
                     t_line[sl1, sl2], segy_gen_to_array(s_line[sl1, sl2]), reshape=True,
                 )
-
-
-class TestStructuredTileSegyDepths:
-    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_len(self, t: StructuredTileSegy, s: SegyFile) -> None:
-        assert len(t.depth) == len(s.depth_slice)
-
-    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_get(self, t: StructuredTileSegy, s: SegyFile) -> None:
-        i = np.random.randint(0, len(s.samples) // 2)
-        j = np.random.randint(i + 1, len(s.samples))
-        # one depth
-        assert_equal_arrays(t.depth[i], s.depth_slice[i])
-        # slice depths
-        for sl in iter_slices(i, j):
-            assert_equal_arrays(t.depth[sl], segy_gen_to_array(s.depth_slice[sl]))

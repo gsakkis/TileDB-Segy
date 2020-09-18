@@ -6,7 +6,7 @@ import numpy as np
 import tiledb
 from segyio import TraceSortingFormat
 
-from .indexables import Lines, Traces
+from .indexables import Indexable, Lines, TraceDepth, Traces
 
 
 class TileSegy:
@@ -43,6 +43,10 @@ class TileSegy:
     @property
     def trace(self) -> Traces:
         return Traces(self._data, self._headers)
+
+    @property
+    def depth(self) -> Indexable:
+        return TraceDepth(self._data)
 
     def close(self) -> None:
         self._headers.close()
@@ -86,7 +90,7 @@ class StructuredTileSegy(TileSegy):
         raise RuntimeError(f"Unknown sorting {self.sorting}")  # pragma: nocover
 
     @property
-    def depth(self) -> Lines:
+    def depth(self) -> Indexable:
         return self._get_lines("samples", np.arange(len(self.samples)))
 
     @property
@@ -106,8 +110,8 @@ class StructuredTileSegy(TileSegy):
             dim_name=dim_name,
             labels=labels,
             offsets=self.offsets,
-            data_tdb=self._data,
-            headers_tdb=self._headers,
+            data=self._data,
+            headers=self._headers,
         )
 
 
