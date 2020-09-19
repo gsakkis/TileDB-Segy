@@ -171,8 +171,13 @@ class Lines(Indexable):
         else:
             major_axis = 0
 
+        # move the major_axis first
         if major_axis > 0:
             data = data.swapaxes(0, major_axis)
+
+        # move the offsets axis second
+        if multi_labels and multi_offsets:
+            data = data.swapaxes(1, offsets_axis)
 
         # for multiple depths need to do an extra swap: (slow, fast) -> (fast, slow)
         if self._dim_name == "samples" and multi_labels:
@@ -180,7 +185,7 @@ class Lines(Indexable):
 
         return data
 
-    _offsets_axis = property(lambda self: 1)
+    _offsets_axis = property(lambda self: 2)
     _labels_axis = property(
         lambda self: next(
             i

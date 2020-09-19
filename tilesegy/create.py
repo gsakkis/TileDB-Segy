@@ -207,13 +207,13 @@ class StructuredSegyFileConverter(SegyFileConverter):
                 tile=self._fast_tile(trace_size),
             ),
             tiledb.Dim(
+                name=slow_dim, domain=(0, slow_lines - 1), dtype=dtype, tile=slow_lines,
+            ),
+            tiledb.Dim(
                 name="offsets",
                 domain=(0, len(self.segy_file.offsets) - 1),
                 dtype=dtype,
                 tile=1,
-            ),
-            tiledb.Dim(
-                name=slow_dim, domain=(0, slow_lines - 1), dtype=dtype, tile=slow_lines,
             ),
         ]
 
@@ -237,7 +237,7 @@ class StructuredSegyFileConverter(SegyFileConverter):
                             v = getfield(buf, key)
                             if v:
                                 cube[i, j] = v
-                tdb[sl, offset_idx] = dict(zip(TRACE_FIELD_NAMES, cubes))
+                tdb[sl, :, offset_idx] = dict(zip(TRACE_FIELD_NAMES, cubes))
 
     def _fill_data(self, tdb: tiledb.Array) -> None:
         super()._fill_data(tdb)
@@ -250,7 +250,7 @@ class StructuredSegyFileConverter(SegyFileConverter):
         for offset_idx, offset in enumerate(self.segy_file.offsets):
             for sl in iter_slices(len(fast_lines), step):
                 cube = np.stack([get_line[i, offset] for i in fast_lines[sl]])
-                tdb[sl, offset_idx] = cube
+                tdb[sl, :, offset_idx] = cube
 
     def _fast_tile(self, trace_size: int) -> int:
         num_fast, num_slow = map(
