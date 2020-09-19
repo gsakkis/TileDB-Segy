@@ -6,7 +6,7 @@ import numpy as np
 import tiledb
 from segyio import TraceSortingFormat
 
-from .indexables import Indexable, Lines, TraceDepth, Traces
+from .indexables import Indexable, Lines, StructuredTraces, TraceDepth, Traces
 
 
 class TileSegy:
@@ -73,6 +73,10 @@ class TileSegy:
 
 
 class StructuredTileSegy(TileSegy):
+    @property
+    def trace(self) -> Traces:
+        return StructuredTraces(self._data, self._headers)
+
     @property
     def iline(self) -> Lines:
         return self._get_lines("ilines", self.ilines)

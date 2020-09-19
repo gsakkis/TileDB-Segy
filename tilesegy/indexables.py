@@ -80,12 +80,13 @@ class Traces(Indexable):
         self._headers = headers
 
     def __len__(self) -> int:
-        return cast(int, self._data.shape[0])
+        return cast(int, np.asarray(self._data.shape[:-1]).prod())
 
     def __getitem__(
         self, i: Union[Index, Tuple[Index, Index]]
     ) -> Union[np.number, np.ndarray]:
-        return self._data[i]
+        trace = self._data[i]
+        return trace if trace.ndim > 0 else trace[()]
 
     @property
     def headers(self) -> Headers:
@@ -93,6 +94,31 @@ class Traces(Indexable):
 
     def header(self, name: str) -> Header:
         return Header(tiledb.DenseArray(self._headers.uri, attr=name))
+
+
+class StructuredTraces(Traces):
+    def __getitem__(
+        self, i: Union[Index, Tuple[Index, Index]]
+    ) -> Union[np.number, np.ndarray]:
+        if not isinstance(i, tuple):
+            i = i, slice(None)
+        traces = self._get_traces(*i)
+        return traces if traces.ndim > 0 else traces[()]
+
+    @singledispatchmethod
+    def _get_traces(self, t: object, s: Index) -> np.ndarray:
+        raise NotImplementedError(f"Cannot index by {t.__class__}")  # pragma: nocover
+
+    @_get_traces.register(int)
+    def _get_one_trace(self, t: int, s: Index) -> np.ndarray:
+        # we store data as (fast, offset, slow), trace is (fast, slow, offset) order
+        fast, offset, slow, _ = self._data.shape
+        fast, slow, offset = np.unravel_index(t, (fast, slow, offset))
+        return self._data[(fast, offset, slow, s)]
+
+    @_get_traces.register(slice)
+    def _get_slice_traces(self, t: slice, s: Index) -> np.ndarray:
+        return np.stack(self._get_traces(i, s) for i in range(len(self))[t])
 
 
 class Lines(Indexable):

@@ -1,5 +1,5 @@
 import itertools as it
-from typing import Iterator, Mapping, Tuple
+from typing import Iterator, Mapping, Union
 
 import numpy as np
 import pytest
@@ -11,16 +11,23 @@ from tests.conftest import parametrize_tilesegy_segyfiles, parametrize_tilesegys
 from tilesegy import StructuredTileSegy, TileSegy
 
 
-def assert_equal_arrays(a: np.ndarray, b: np.ndarray, reshape: bool = False) -> None:
+def assert_equal_arrays(
+    a: Union[np.ndarray, np.number],
+    b: Union[np.ndarray, np.number],
+    reshape: bool = False,
+) -> None:
     assert a.dtype == b.dtype
-    if reshape:
+    if isinstance(a, np.number) or isinstance(b, np.number):
+        assert isinstance(a, np.number) and isinstance(b, np.number)
+        assert a == b
+    elif not reshape:
+        assert a.ndim == b.ndim
+        assert a.shape == b.shape
+    else:
         assert a.ndim == b.ndim + 1
         assert a.shape[0] * a.shape[1] == b.shape[0]
         assert a.shape[-2:] == b.shape[-2:]
         b = b.reshape(a.shape)
-    else:
-        assert a.ndim == b.ndim
-        assert a.shape == b.shape
     np.testing.assert_array_equal(a, b)
 
 
@@ -34,10 +41,6 @@ def stringify_keys(d: Mapping[int, int]) -> Mapping[str, int]:
 
 def iter_slices(i: int, j: int) -> Iterator[slice]:
     return (slice(*bounds) for bounds in it.product((None, i), (None, j)))
-
-
-def iter_slice_pairs(i: int, j: int, x: int, y: int) -> Iterator[Tuple[slice, slice]]:
-    return it.product(iter_slices(i, j), iter_slices(x, y))
 
 
 class TestTileSegy:
@@ -80,11 +83,11 @@ class TestTileSegy:
 
 
 class TestTileSegyTrace:
-    @parametrize_tilesegy_segyfiles("t", "s", structured=False)
+    @parametrize_tilesegy_segyfiles("t", "s")
     def test_len(self, t: TileSegy, s: SegyFile) -> None:
         assert len(t.trace) == len(s.trace) == s.tracecount
 
-    @parametrize_tilesegy_segyfiles("t", "s", structured=False)
+    @parametrize_tilesegy_segyfiles("t", "s")
     def test_get(self, t: TileSegy, s: SegyFile) -> None:
         i = np.random.randint(0, s.tracecount // 2)
         j = np.random.randint(i + 1, s.tracecount)
@@ -93,19 +96,25 @@ class TestTileSegyTrace:
 
         # one trace, all samples
         assert_equal_arrays(t.trace[i], s.trace[i])
+
         # one trace, one sample
-        assert t.trace[i, x] == s.trace[i, x]
+        # XXX: segyio returns an array of size 1 instead of scalar
+        assert_equal_arrays(t.trace[i, x], s.trace[i, x][0])
+
         # one trace, slice samples
         for sl in iter_slices(x, y):
             assert_equal_arrays(t.trace[i, sl], s.trace[i, sl])
 
-        for sl1, sl2 in iter_slice_pairs(i, j, x, y):
+        for sl in iter_slices(i, j):
             # slices traces, all samples
-            assert_equal_arrays(t.trace[sl1], segy_gen_to_array(s.trace[sl1]))
+            assert_equal_arrays(t.trace[sl], segy_gen_to_array(s.trace[sl]))
             # slices traces, one sample
-            assert_equal_arrays(t.trace[sl1, x], np.fromiter(s.trace[sl1, x], s.dtype))
+            assert_equal_arrays(t.trace[sl, x], np.fromiter(s.trace[sl, x], s.dtype))
             # slices traces, slice samples
-            assert_equal_arrays(t.trace[sl1, sl2], segy_gen_to_array(s.trace[sl1, sl2]))
+            for sl2 in iter_slices(x, y):
+                assert_equal_arrays(
+                    t.trace[sl, sl2], segy_gen_to_array(s.trace[sl, sl2])
+                )
 
     @parametrize_tilesegy_segyfiles("t", "s", structured=False)
     def test_headers(self, t: TileSegy, s: SegyFile) -> None:
@@ -181,18 +190,23 @@ class TestStructuredTileSegy:
         assert_equal_arrays(t_line[i], s_line[i])
         # one line, x offset
         assert_equal_arrays(t_line[i, x], s_line[i, x])
+
         for sl in iter_slices(i, j):
             # slice lines, first offset
             assert_equal_arrays(t_line[sl], segy_gen_to_array(s_line[sl]))
             # slice lines, x offset
             assert_equal_arrays(t_line[sl, x], segy_gen_to_array(s_line[sl, x]))
 
-        if len(s.offsets) > 1:
-            x, y = s.offsets[1], s.offsets[3]
-            for sl1, sl2 in iter_slice_pairs(i, j, x, y):
-                # one line, slice offsets
-                assert_equal_arrays(t_line[i, sl2], segy_gen_to_array(s_line[i, sl2]))
-                # slice lines, slice offsets
-                assert_equal_arrays(
-                    t_line[sl1, sl2], segy_gen_to_array(s_line[sl1, sl2]), reshape=True,
-                )
+            if len(s.offsets) > 1:
+                x, y = s.offsets[1], s.offsets[3]
+                for sl2 in iter_slices(x, y):
+                    # one line, slice offsets
+                    assert_equal_arrays(
+                        t_line[i, sl2], segy_gen_to_array(s_line[i, sl2])
+                    )
+                    # slice lines, slice offsets
+                    assert_equal_arrays(
+                        t_line[sl, sl2],
+                        segy_gen_to_array(s_line[sl, sl2]),
+                        reshape=True,
+                    )
