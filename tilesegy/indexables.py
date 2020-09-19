@@ -141,7 +141,7 @@ class Lines(Indexable):
         return f"Lines({self._dim_name!r})"
 
     def __len__(self) -> int:
-        return cast(int, self._data.shape[self._labels_axis])
+        return cast(int, self._data.shape[self._dims.index(self._dim_name)])
 
     def __getitem__(self, i: Union[Index, Tuple[Index, Index]]) -> np.ndarray:
         if isinstance(i, tuple):
@@ -149,50 +149,45 @@ class Lines(Indexable):
         else:
             labels, offsets = i, self._default_offset
 
-        label_indices = self._label_indexer[labels]
-        multi_labels = isinstance(label_indices, slice)
-        offset_indices = self._offset_indexer[offsets]
-        multi_offsets = isinstance(offset_indices, slice)
+        offsets_dim = "offsets"
+        labels_dim = self._dim_name
+        dims = self._dims
 
-        labels_axis = self._labels_axis
-        offsets_axis = self._offsets_axis
         composite_index: List[Index] = [slice(None)] * 4
-        composite_index[labels_axis] = label_indices
-        composite_index[offsets_axis] = offset_indices
+        composite_index[dims.index(labels_dim)] = self._label_indexer[labels]
+        composite_index[dims.index(offsets_dim)] = self._offset_indexer[offsets]
         data = self._data[tuple(composite_index)]
 
-        # TODO: Simplify and/or comment the swap axes logic
-        if multi_labels and multi_offsets:
-            major_axis = labels_axis
-        elif multi_labels:
-            major_axis = labels_axis - int(labels_axis > offsets_axis)
-        elif multi_offsets:
-            major_axis = offsets_axis - int(offsets_axis > labels_axis)
-        else:
-            major_axis = 0
+        if not isinstance(labels, slice):
+            dims.remove(labels_dim)
+        if not isinstance(offsets, slice):
+            dims.remove(offsets_dim)
 
-        # move the major_axis first
-        if major_axis > 0:
-            data = data.swapaxes(0, major_axis)
+        # ensure the labels dim is the first axis (if present)
+        try:
+            labels_axis = dims.index(labels_dim)
+            if labels_axis != 0:
+                data = data.swapaxes(0, labels_axis)
+                labels_axis = 0
+        except ValueError:
+            labels_axis = -1
 
-        # move the offsets axis second
-        if multi_labels and multi_offsets:
-            data = data.swapaxes(1, offsets_axis)
+        # ensure the offsets dim is right after the labels
+        try:
+            offsets_axis = dims.index(offsets_dim)
+            if offsets_axis != labels_axis + 1:
+                data = data.swapaxes(labels_axis + 1, offsets_axis)
+        except ValueError:
+            pass
 
-        # for multiple depths need to do an extra swap: (slow, fast) -> (fast, slow)
-        if self._dim_name == "samples" and multi_labels:
+        # for samples, if at least one axis is swapped, the last two dims are (slow, fast)
+        # if so, swap them to (fast, slow)
+        if labels_dim == "samples" and len(dims) > 2:
             data = data.swapaxes(-1, -2)
 
         return data
 
-    _offsets_axis = property(lambda self: 2)
-    _labels_axis = property(
-        lambda self: next(
-            i
-            for i, dim in enumerate(self._data.schema.domain)
-            if dim.name == self._dim_name
-        )
-    )
+    _dims = property(lambda self: [dim.name for dim in self._data.schema.domain])
 
 
 class LabelIndexer:
@@ -207,7 +202,7 @@ class LabelIndexer:
         self._sorter = labels.argsort()
 
     @singledispatchmethod
-    def __getitem__(self, label: object) -> int:
+    def __getitem__(self, label: int) -> int:
         indices = np.flatnonzero(label == self._labels)
         assert indices.size <= 1, indices
         if indices.size == 0:
