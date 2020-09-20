@@ -94,7 +94,7 @@ class StructuredTileSegy(TileSegy):
         raise RuntimeError(f"Unknown sorting {self.sorting}")  # pragma: nocover
 
     @property
-    def depth(self) -> Indexable:
+    def depth(self) -> Lines:
         return self._get_lines("samples", np.arange(len(self.samples)))
 
     @property
