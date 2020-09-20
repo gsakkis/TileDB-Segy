@@ -1,3 +1,4 @@
+import itertools as it
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Tuple, Union, cast
 
@@ -85,8 +86,10 @@ class Traces(Indexable):
     def __getitem__(
         self, i: Union[Index, Tuple[Index, Index]]
     ) -> Union[np.number, np.ndarray]:
-        trace = self._data[i]
-        return trace if trace.ndim > 0 else trace[()]
+        # for single sample segyio returns an array of size 1 instead of scalar
+        if isinstance(i, tuple) and not isinstance(i[1], slice):
+            i = i[0], slice(i[1], i[1] + 1)
+        return self._data[i]
 
     @property
     def headers(self) -> Headers:
@@ -100,25 +103,40 @@ class StructuredTraces(Traces):
     def __getitem__(
         self, i: Union[Index, Tuple[Index, Index]]
     ) -> Union[np.number, np.ndarray]:
-        if not isinstance(i, tuple):
-            i = i, slice(None)
-        traces = self._get_traces(*i)
-        return traces if traces.ndim > 0 else traces[()]
+        if isinstance(i, tuple):
+            trace_index, samples = i
+            # for single sample segyio returns an array of size 1 instead of scalar
+            if not isinstance(samples, slice):
+                samples = slice(samples, samples + 1)
+        else:
+            trace_index, samples = i, slice(None)
 
-    @singledispatchmethod
-    def _get_traces(self, t: object, s: Index) -> np.ndarray:
-        raise NotImplementedError(f"Cannot index by {t.__class__}")  # pragma: nocover
+        shape = self._data.shape[:-1]
+        if isinstance(trace_index, slice):
+            # get indices in 1D (trace index) and 3D (fast-slow-offset indices)
+            raveled_indices = np.arange(len(self))[trace_index]
+            unraveled_indices = np.unravel_index(raveled_indices, shape)
+            unique_unraveled_indices = tuple(map(np.unique, unraveled_indices))
 
-    @_get_traces.register(int)
-    def _get_one_trace(self, t: int, s: Index) -> np.ndarray:
-        # we store data as (fast, offset, slow), trace is (fast, slow, offset) order
-        fast, offset, slow, _ = self._data.shape
-        fast, slow, offset = np.unravel_index(t, (fast, slow, offset))
-        return self._data[(fast, offset, slow, s)]
+            # get the hypercube (fast-slow-offset-samples) for the cartesian product of
+            # unique_unraveled_indices and reshape it to 2D (trace-samples)
+            traces = self._data[
+                (*map(array_to_slice, unique_unraveled_indices), samples)
+            ]
+            traces = traces.reshape(np.array(traces.shape[:-1]).prod(), -1)
 
-    @_get_traces.register(slice)
-    def _get_slice_traces(self, t: slice, s: Index) -> np.ndarray:
-        return np.stack(self._get_traces(i, s) for i in range(len(self))[t])
+            # select the requested subset of indices from the cartesian product
+            points = frozenset(zip(*unraveled_indices))
+            selected_product_indices = [
+                i
+                for i, point in enumerate(it.product(*unique_unraveled_indices))
+                if point in points
+            ]
+            traces = traces[selected_product_indices]
+        else:
+            traces = self._data[(*np.unravel_index(trace_index, shape), samples)]
+
+        return traces
 
 
 class Lines(Indexable):
@@ -228,12 +246,13 @@ class LabelIndexer:
         if len(indices) == 0:
             raise ValueError(f"{label_slice} has no overlap with labels")
 
-        start = indices[0]
-        step = indices[1] - start if len(indices) > 1 else 1
-        stop = indices[-1] + (1 if step > 0 else -1)
-        if (np.arange(start, stop, step) != indices).any():
-            raise ValueError(
-                f"Label indices for {label_slice} is not a slice: {indices}"
-            )
+        return array_to_slice(indices)
 
-        return slice(start, stop, step)
+
+def array_to_slice(a: np.ndarray) -> slice:
+    start = a[0]
+    step = a[1] - start if len(a) > 1 else 1
+    stop = a[-1] + (1 if step > 0 else -1)
+    if not np.array_equal(np.arange(start, stop, step), a):
+        raise ValueError(f"Array is not a range: {a}")
+    return slice(start, stop, step)

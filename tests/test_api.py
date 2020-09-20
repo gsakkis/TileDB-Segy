@@ -98,8 +98,7 @@ class TestTileSegyTrace:
         assert_equal_arrays(t.trace[i], s.trace[i])
 
         # one trace, one sample
-        # XXX: segyio returns an array of size 1 instead of scalar
-        assert_equal_arrays(t.trace[i, x], s.trace[i, x][0])
+        assert_equal_arrays(t.trace[i, x], s.trace[i, x])
 
         # one trace, slice samples
         for sl in iter_slices(x, y):
@@ -109,7 +108,7 @@ class TestTileSegyTrace:
             # slices traces, all samples
             assert_equal_arrays(t.trace[sl], segy_gen_to_array(s.trace[sl]))
             # slices traces, one sample
-            assert_equal_arrays(t.trace[sl, x], np.fromiter(s.trace[sl, x], s.dtype))
+            assert_equal_arrays(t.trace[sl, x], segy_gen_to_array(s.trace[sl, x]))
             # slices traces, slice samples
             for sl2 in iter_slices(x, y):
                 assert_equal_arrays(
