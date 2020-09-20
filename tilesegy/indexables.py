@@ -8,7 +8,7 @@ import tiledb
 from ._singledispatchmethod import singledispatchmethod  # type: ignore
 from .utils import LabelIndexer, ensure_slice
 
-Index = Union[int, slice]
+Index = Union[int, np.integer, slice]
 
 
 class Indexable(ABC):
