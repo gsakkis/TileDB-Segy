@@ -6,6 +6,7 @@ import numpy as np
 import tiledb
 
 from ._singledispatchmethod import singledispatchmethod  # type: ignore
+from .utils import LabelIndexer, ensure_slice
 
 Index = Union[int, slice]
 
@@ -83,12 +84,10 @@ class Traces(Indexable):
     def __len__(self) -> int:
         return cast(int, np.asarray(self._data.shape[:-1]).prod())
 
-    def __getitem__(
-        self, i: Union[Index, Tuple[Index, Index]]
-    ) -> Union[np.number, np.ndarray]:
+    def __getitem__(self, i: Union[Index, Tuple[Index, Index]]) -> np.ndarray:
         # for single sample segyio returns an array of size 1 instead of scalar
-        if isinstance(i, tuple) and not isinstance(i[1], slice):
-            i = i[0], slice(i[1], i[1] + 1)
+        if isinstance(i, tuple):
+            i = i[0], ensure_slice(i[1])
         return self._data[i]
 
     @property
@@ -100,14 +99,10 @@ class Traces(Indexable):
 
 
 class StructuredTraces(Traces):
-    def __getitem__(
-        self, i: Union[Index, Tuple[Index, Index]]
-    ) -> Union[np.number, np.ndarray]:
+    def __getitem__(self, i: Union[Index, Tuple[Index, Index]]) -> np.ndarray:
         if isinstance(i, tuple):
-            trace_index, samples = i
             # for single sample segyio returns an array of size 1 instead of scalar
-            if not isinstance(samples, slice):
-                samples = slice(samples, samples + 1)
+            trace_index, samples = i[0], ensure_slice(i[1])
         else:
             trace_index, samples = i, slice(None)
 
@@ -120,9 +115,7 @@ class StructuredTraces(Traces):
 
             # get the hypercube (fast-slow-offset-samples) for the cartesian product of
             # unique_unraveled_indices and reshape it to 2D (trace-samples)
-            traces = self._data[
-                (*map(array_to_slice, unique_unraveled_indices), samples)
-            ]
+            traces = self._data[(*map(ensure_slice, unique_unraveled_indices), samples)]
             traces = traces.reshape(np.array(traces.shape[:-1]).prod(), -1)
 
             # select the requested subset of indices from the cartesian product
@@ -206,53 +199,3 @@ class Lines(Indexable):
         return data
 
     _dims = property(lambda self: [dim.name for dim in self._data.schema.domain])
-
-
-class LabelIndexer:
-    def __init__(self, labels: np.ndarray):
-        if not issubclass(labels.dtype.type, np.integer):
-            raise ValueError("labels should be integers")
-        if len(np.unique(labels)) != len(labels):
-            raise ValueError(f"labels should not contain duplicates: {labels}")
-        self._labels = labels
-        self._min_label = labels.min()
-        self._max_label = labels.max() + 1
-        self._sorter = labels.argsort()
-
-    @singledispatchmethod
-    def __getitem__(self, label: int) -> int:
-        indices = np.flatnonzero(label == self._labels)
-        assert indices.size <= 1, indices
-        if indices.size == 0:
-            raise ValueError(f"{label} is not in labels")
-        return int(indices[0])
-
-    @__getitem__.register(slice)
-    def _get_slice(self, label_slice: slice) -> slice:
-        start, stop, step = label_slice.start, label_slice.stop, label_slice.step
-        min_label = self._min_label
-        if step is None or step > 0:  # increasing step
-            if start is None or start < min_label:
-                start = min_label
-        else:  # decreasing step
-            if stop is None or stop < min_label - 1:
-                stop = min_label - 1
-
-        label_range = np.arange(*slice(start, stop, step).indices(self._max_label))
-        indices = self._sorter[
-            self._labels.searchsorted(label_range, sorter=self._sorter)
-        ]
-        indices = indices[self._labels[indices] == label_range]
-        if len(indices) == 0:
-            raise ValueError(f"{label_slice} has no overlap with labels")
-
-        return array_to_slice(indices)
-
-
-def array_to_slice(a: np.ndarray) -> slice:
-    start = a[0]
-    step = a[1] - start if len(a) > 1 else 1
-    stop = a[-1] + (1 if step > 0 else -1)
-    if not np.array_equal(np.arange(start, stop, step), a):
-        raise ValueError(f"Array is not a range: {a}")
-    return slice(start, stop, step)
