@@ -54,7 +54,7 @@ class TileSegy:
 
     @property
     def depth(self) -> Indexable:
-        return idx.TraceDepth(self._data)
+        return idx.Depth(self._data)
 
     def close(self) -> None:
         self._headers.close()
@@ -83,11 +83,11 @@ class TileSegy:
 class StructuredTileSegy(TileSegy):
     @property
     def iline(self) -> Indexable:
-        return self._get_lines("ilines", self.ilines)
+        return idx.Line("ilines", self.ilines, self.offsets, self._data)
 
     @property
     def xline(self) -> Indexable:
-        return self._get_lines("xlines", self.xlines)
+        return idx.Line("xlines", self.xlines, self.offsets, self._data)
 
     @property
     def fast(self) -> Indexable:
@@ -99,7 +99,7 @@ class StructuredTileSegy(TileSegy):
 
     @property
     def depth(self) -> Indexable:
-        return self._get_lines("samples", np.arange(len(self.samples)))
+        return idx.StructuredDepth(self._data)
 
     @property
     def offsets(self) -> np.ndarray:
@@ -112,9 +112,6 @@ class StructuredTileSegy(TileSegy):
     @property
     def xlines(self) -> np.ndarray:
         return self._meta_to_numpy("xlines", dtype="intc")
-
-    def _get_lines(self, dim_name: str, labels: np.ndarray) -> Indexable:
-        return idx.Line(dim_name, labels, self.offsets, self._data)
 
 
 def open(uri: Union[str, Path]) -> TileSegy:

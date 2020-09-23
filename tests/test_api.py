@@ -213,41 +213,32 @@ class TestStructuredTileSegy:
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
     def test_depth_offsets(self, t: StructuredTileSegy, s: SegyFile) -> None:
         # segyio doesn't currently support offset indexing for depth
-
-        if s.fast is s.iline:
-            fast, slow = s.ilines, s.xlines
-        else:
-            fast, slow = s.xlines, s.ilines
-        shape = tuple(map(len, (fast, slow)))
-
         i = np.random.randint(0, len(s.samples) // 2)
         j = np.random.randint(i + 1, len(s.samples))
         x = np.random.choice(s.offsets)
 
+        t_depth = t.depth
+        s_depth = s.depth_slice
         # one line, x offset
-        with pytest.raises(TypeError):
-            s.depth_slice[i, x]
-        assert t.depth[i, x].ndim == 2
-        assert t.depth[i, x].shape == shape
+        for depth in t_depth, s_depth:
+            with pytest.raises(TypeError):
+                depth[i, x]
 
         for sl in iter_slices(i, j):
             # slice lines, x offset
-            with pytest.raises(TypeError):
-                s.depth[sl, x]
-            assert t.depth[sl, x].ndim == 3
-            assert t.depth[sl, x].shape[-2:] == shape
+            for depth in t_depth, s_depth:
+                with pytest.raises(TypeError):
+                    depth[sl, x]
 
             if len(s.offsets) > 1:
                 x, y = s.offsets[1], s.offsets[3]
                 for sl2 in iter_slices(x, y):
                     # one line, slice offsets
-                    with pytest.raises(TypeError):
-                        s.depth[i, sl2]
-                    assert t.depth[i, sl2].ndim == 3
-                    assert t.depth[i, sl2].shape[-2:] == shape
+                    for depth in t_depth, s_depth:
+                        with pytest.raises(TypeError):
+                            depth[i, sl2]
 
                     # slice lines, slice offsets
-                    with pytest.raises(TypeError):
-                        s.depth[sl, sl2]
-                    assert t.depth[sl, sl2].ndim == 4
-                    assert t.depth[sl, sl2].shape[-2:] == shape
+                    for depth in t_depth, s_depth:
+                        with pytest.raises(TypeError):
+                            depth[sl, sl2]

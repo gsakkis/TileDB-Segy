@@ -61,13 +61,29 @@ class Header(Indexable):
         return [dict(zip(keys, row)) for row in zip(*columns)]
 
 
-class TraceDepth(Indexable):
+class Depth(Indexable):
     def __len__(self) -> int:
-        return cast(int, self._tdb.shape[1])
+        return cast(int, self._tdb.shape[-1])
 
     def __getitem__(self, i: Index) -> np.ndarray:
         data = self._tdb[:, i]
         return data.swapaxes(0, 1) if data.ndim == 2 else data
+
+
+class StructuredDepth(Depth):
+    def __getitem__(self, i: Index) -> np.ndarray:
+        # segyio depth doesn't support offsets (https://github.com/equinor/segyio/issues/474), pick the first one
+        try:
+            data = self._tdb[..., 0, i]
+        except IndexError as ex:
+            raise TypeError(
+                f"depth indices must be integers or slices, not {i.__class__.__name__}"
+            ) from ex
+
+        if data.ndim == 3:
+            # (fast, slow, samples) -> (samples, fast, slow)
+            data = data.swapaxes(0, 2).swapaxes(1, 2)
+        return data
 
 
 class Trace(Indexable):
@@ -162,11 +178,6 @@ class Line(Indexable):
                 data = data.swapaxes(labels_axis + 1, offsets_axis)
         except ValueError:
             pass
-
-        # for samples, if at least one axis is swapped, the last two dims are (slow, fast)
-        # if so, swap them to (fast, slow)
-        if labels_dim == "samples" and len(dims) > 2:
-            data = data.swapaxes(-1, -2)
 
         return data
 
