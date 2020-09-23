@@ -6,7 +6,8 @@ import numpy as np
 import tiledb
 from segyio import TraceSortingFormat
 
-from .indexables import Indexable, Lines, StructuredTraces, TraceDepth, Traces
+from . import indexables as idx
+from .indexables import Indexable
 
 
 class TileSegy:
@@ -41,12 +42,19 @@ class TileSegy:
         return self._meta_to_numpy("samples")
 
     @property
-    def trace(self) -> Traces:
-        return Traces(self._data, self._headers)
+    def trace(self) -> Indexable:
+        return idx.Trace(self._data)
+
+    @property
+    def header(self) -> Indexable:
+        return idx.Header(self._headers)
+
+    def attributes(self, name: str) -> Indexable:
+        return idx.Attributes(tiledb.DenseArray(self._headers.uri, attr=name))
 
     @property
     def depth(self) -> Indexable:
-        return TraceDepth(self._data)
+        return idx.TraceDepth(self._data)
 
     def close(self) -> None:
         self._headers.close()
@@ -74,19 +82,19 @@ class TileSegy:
 
 class StructuredTileSegy(TileSegy):
     @property
-    def trace(self) -> Traces:
-        return StructuredTraces(self._data, self._headers)
+    def trace(self) -> Indexable:
+        return idx.StructuredTrace(self._data)
 
     @property
-    def iline(self) -> Lines:
+    def iline(self) -> Indexable:
         return self._get_lines("ilines", self.ilines)
 
     @property
-    def xline(self) -> Lines:
+    def xline(self) -> Indexable:
         return self._get_lines("xlines", self.xlines)
 
     @property
-    def fast(self) -> Lines:
+    def fast(self) -> Indexable:
         if self.sorting == TraceSortingFormat.INLINE_SORTING:
             return self.iline
         if self.sorting == TraceSortingFormat.CROSSLINE_SORTING:
@@ -94,7 +102,7 @@ class StructuredTileSegy(TileSegy):
         raise RuntimeError(f"Unknown sorting {self.sorting}")  # pragma: nocover
 
     @property
-    def depth(self) -> Lines:
+    def depth(self) -> Indexable:
         return self._get_lines("samples", np.arange(len(self.samples)))
 
     @property
@@ -109,14 +117,8 @@ class StructuredTileSegy(TileSegy):
     def xlines(self) -> np.ndarray:
         return self._meta_to_numpy("xlines", dtype="intc")
 
-    def _get_lines(self, dim_name: str, labels: np.ndarray) -> Lines:
-        return Lines(
-            dim_name=dim_name,
-            labels=labels,
-            offsets=self.offsets,
-            data=self._data,
-            headers=self._headers,
-        )
+    def _get_lines(self, dim_name: str, labels: np.ndarray) -> Indexable:
+        return idx.Line(dim_name, labels, self.offsets, self._data)
 
 
 def open(uri: Union[str, Path]) -> TileSegy:

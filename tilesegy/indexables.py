@@ -12,6 +12,9 @@ Index = Union[int, np.integer, slice]
 
 
 class Indexable(ABC):
+    def __init__(self, tdb: tiledb.Array):
+        self._tdb = tdb
+
     @abstractmethod
     def __len__(self) -> int:
         ...  # pragma: nocover
@@ -21,10 +24,7 @@ class Indexable(ABC):
         ...  # pragma: nocover
 
 
-class Header(Indexable):
-    def __init__(self, tdb: tiledb.Array):
-        self._tdb = tdb
-
+class Attributes(Indexable):
     def __len__(self) -> int:
         return len(self._tdb)
 
@@ -41,10 +41,7 @@ class Header(Indexable):
         return cast(List[int], self._tdb[i].tolist())
 
 
-class Headers(Indexable):
-    def __init__(self, tdb: tiledb.Array):
-        self._tdb = tdb
-
+class Header(Indexable):
     def __len__(self) -> int:
         return len(self._tdb)
 
@@ -65,9 +62,6 @@ class Headers(Indexable):
 
 
 class TraceDepth(Indexable):
-    def __init__(self, tdb: tiledb.Array):
-        self._tdb = tdb
-
     def __len__(self) -> int:
         return cast(int, self._tdb.shape[1])
 
@@ -76,29 +70,18 @@ class TraceDepth(Indexable):
         return data.swapaxes(0, 1) if data.ndim == 2 else data
 
 
-class Traces(Indexable):
-    def __init__(self, data: tiledb.Array, headers: tiledb.Array):
-        self._data = data
-        self._headers = headers
-
+class Trace(Indexable):
     def __len__(self) -> int:
-        return cast(int, np.asarray(self._data.shape[:-1]).prod())
+        return cast(int, np.asarray(self._tdb.shape[:-1]).prod())
 
     def __getitem__(self, i: Union[Index, Tuple[Index, Index]]) -> np.ndarray:
         # for single sample segyio returns an array of size 1 instead of scalar
         if isinstance(i, tuple):
             i = i[0], ensure_slice(i[1])
-        return self._data[i]
-
-    @property
-    def headers(self) -> Headers:
-        return Headers(self._headers)
-
-    def header(self, name: str) -> Header:
-        return Header(tiledb.DenseArray(self._headers.uri, attr=name))
+        return self._tdb[i]
 
 
-class StructuredTraces(Traces):
+class StructuredTrace(Trace):
     def __getitem__(self, i: Union[Index, Tuple[Index, Index]]) -> np.ndarray:
         if isinstance(i, tuple):
             # for single sample segyio returns an array of size 1 instead of scalar
@@ -106,7 +89,7 @@ class StructuredTraces(Traces):
         else:
             trace_index, samples = i, slice(None)
 
-        shape = self._data.shape[:-1]
+        shape = self._tdb.shape[:-1]
         if isinstance(trace_index, slice):
             # get indices in 1D (trace index) and 3D (fast-slow-offset indices)
             raveled_indices = np.arange(len(self))[trace_index]
@@ -115,7 +98,7 @@ class StructuredTraces(Traces):
 
             # get the hypercube (fast-slow-offset-samples) for the cartesian product of
             # unique_unraveled_indices and reshape it to 2D (trace-samples)
-            traces = self._data[(*map(ensure_slice, unique_unraveled_indices), samples)]
+            traces = self._tdb[(*map(ensure_slice, unique_unraveled_indices), samples)]
             traces = traces.reshape(np.array(traces.shape[:-1]).prod(), -1)
 
             # select the requested subset of indices from the cartesian product
@@ -127,32 +110,26 @@ class StructuredTraces(Traces):
             ]
             traces = traces[selected_product_indices]
         else:
-            traces = self._data[(*np.unravel_index(trace_index, shape), samples)]
+            traces = self._tdb[(*np.unravel_index(trace_index, shape), samples)]
 
         return traces
 
 
-class Lines(Indexable):
+class Line(Indexable):
     def __init__(
-        self,
-        dim_name: str,
-        labels: np.ndarray,
-        offsets: np.ndarray,
-        data: tiledb.Array,
-        headers: tiledb.Array,
+        self, dim_name: str, labels: np.ndarray, offsets: np.ndarray, tdb: tiledb.Array,
     ):
+        super().__init__(tdb)
         self._dim_name = dim_name
         self._label_indexer = LabelIndexer(labels)
         self._offset_indexer = LabelIndexer(offsets)
         self._default_offset = offsets[0]
-        self._data = data
-        self._headers = headers
 
     def __str__(self) -> str:
-        return f"Lines({self._dim_name!r})"
+        return f"{self.__class__.__name__}({self._dim_name!r})"
 
     def __len__(self) -> int:
-        return cast(int, self._data.shape[self._dims.index(self._dim_name)])
+        return cast(int, self._tdb.shape[self._dims.index(self._dim_name)])
 
     def __getitem__(self, i: Union[Index, Tuple[Index, Index]]) -> np.ndarray:
         if isinstance(i, tuple):
@@ -167,7 +144,7 @@ class Lines(Indexable):
         composite_index: List[Index] = [slice(None)] * 4
         composite_index[dims.index(labels_dim)] = self._label_indexer[labels]
         composite_index[dims.index(offsets_dim)] = self._offset_indexer[offsets]
-        data = self._data[tuple(composite_index)]
+        data = self._tdb[tuple(composite_index)]
 
         if not isinstance(labels, slice):
             dims.remove(labels_dim)
@@ -198,4 +175,4 @@ class Lines(Indexable):
 
         return data
 
-    _dims = property(lambda self: [dim.name for dim in self._data.schema.domain])
+    _dims = property(lambda self: [dim.name for dim in self._tdb.schema.domain])

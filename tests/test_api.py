@@ -116,17 +116,17 @@ class TestTileSegyTrace:
                 )
 
     @parametrize_tilesegy_segyfiles("t", "s", structured=False)
-    def test_headers(self, t: TileSegy, s: SegyFile) -> None:
+    def test_header(self, t: TileSegy, s: SegyFile) -> None:
         i = np.random.randint(0, s.tracecount // 2)
         j = i + 20
-        assert len(t.trace.headers) == len(s.header)
-        assert t.trace.headers[i] == stringify_keys(s.header[i])
-        assert t.trace.headers[i:j] == list(map(stringify_keys, s.header[i:j]))
+        assert len(t.header) == len(s.header)
+        assert t.header[i] == stringify_keys(s.header[i])
+        assert t.header[i:j] == list(map(stringify_keys, s.header[i:j]))
 
     @parametrize_tilesegy_segyfiles("t", "s", structured=False)
-    def test_header(self, t: TileSegy, s: SegyFile) -> None:
+    def test_attributes(self, t: TileSegy, s: SegyFile) -> None:
         str_attr = "TraceNumber"
-        t_attrs = t.trace.header(str_attr)
+        t_attrs = t.attributes(str_attr)
         s_attrs = s.attributes(getattr(TraceField, str_attr))
 
         i = np.random.randint(0, s.tracecount // 2)
@@ -161,10 +161,10 @@ class TestStructuredTileSegy:
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
     def test_fast(self, t: StructuredTileSegy, s: SegyFile) -> None:
         if s.fast is s.iline:
-            assert str(t.fast) == "Lines('ilines')"
+            assert str(t.fast) == "Line('ilines')"
         else:
             assert s.fast is s.xline
-            assert str(t.fast) == "Lines('xlines')"
+            assert str(t.fast) == "Line('xlines')"
 
     @pytest.mark.parametrize("lines", ["ilines", "xlines"])
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
