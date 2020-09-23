@@ -75,14 +75,6 @@ class Trace(Indexable):
         return cast(int, np.asarray(self._tdb.shape[:-1]).prod())
 
     def __getitem__(self, i: Union[Index, Tuple[Index, Index]]) -> np.ndarray:
-        # for single sample segyio returns an array of size 1 instead of scalar
-        if isinstance(i, tuple):
-            i = i[0], ensure_slice(i[1])
-        return self._tdb[i]
-
-
-class StructuredTrace(Trace):
-    def __getitem__(self, i: Union[Index, Tuple[Index, Index]]) -> np.ndarray:
         if isinstance(i, tuple):
             # for single sample segyio returns an array of size 1 instead of scalar
             trace_index, samples = i[0], ensure_slice(i[1])
@@ -90,29 +82,32 @@ class StructuredTrace(Trace):
             trace_index, samples = i, slice(None)
 
         shape = self._tdb.shape[:-1]
-        if isinstance(trace_index, slice):
-            # get indices in 1D (trace index) and 3D (fast-slow-offset indices)
-            raveled_indices = np.arange(len(self))[trace_index]
-            unraveled_indices = np.unravel_index(raveled_indices, shape)
-            unique_unraveled_indices = tuple(map(np.unique, unraveled_indices))
+        if len(shape) == 1:
+            # unstructured tilesegy: already indexed by trace
+            return self._tdb[trace_index, samples]
 
-            # get the hypercube (fast-slow-offset-samples) for the cartesian product of
-            # unique_unraveled_indices and reshape it to 2D (trace-samples)
-            traces = self._tdb[(*map(ensure_slice, unique_unraveled_indices), samples)]
-            traces = traces.reshape(np.array(traces.shape[:-1]).prod(), -1)
+        if not isinstance(trace_index, slice):
+            # translate single trace_index to fast-slow-offset index
+            return self._tdb[(*np.unravel_index(trace_index, shape), samples)]
 
-            # select the requested subset of indices from the cartesian product
-            points = frozenset(zip(*unraveled_indices))
-            selected_product_indices = [
-                i
-                for i, point in enumerate(it.product(*unique_unraveled_indices))
-                if point in points
-            ]
-            traces = traces[selected_product_indices]
-        else:
-            traces = self._tdb[(*np.unravel_index(trace_index, shape), samples)]
+        # get indices in 1D (trace index) and 3D (fast-slow-offset indices)
+        raveled_indices = np.arange(len(self))[trace_index]
+        unraveled_indices = np.unravel_index(raveled_indices, shape)
+        unique_unraveled_indices = tuple(map(np.unique, unraveled_indices))
 
-        return traces
+        # get the hypercube (fast-slow-offset-samples) for the cartesian product of
+        # unique_unraveled_indices and reshape it to 2D (trace-samples)
+        traces = self._tdb[(*map(ensure_slice, unique_unraveled_indices), samples)]
+        traces = traces.reshape(np.array(traces.shape[:-1]).prod(), -1)
+
+        # select the requested subset of indices from the cartesian product
+        points = frozenset(zip(*unraveled_indices))
+        selected_product_indices = [
+            i
+            for i, point in enumerate(it.product(*unique_unraveled_indices))
+            if point in points
+        ]
+        return traces[selected_product_indices]
 
 
 class Line(Indexable):

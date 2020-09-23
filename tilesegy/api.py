@@ -82,10 +82,6 @@ class TileSegy:
 
 class StructuredTileSegy(TileSegy):
     @property
-    def trace(self) -> Indexable:
-        return idx.StructuredTrace(self._data)
-
-    @property
     def iline(self) -> Indexable:
         return self._get_lines("ilines", self.ilines)
 
