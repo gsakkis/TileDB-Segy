@@ -24,68 +24,6 @@ class Indexable(ABC):
         ...  # pragma: nocover
 
 
-class Attributes(Indexable):
-    def __len__(self) -> int:
-        return len(self._tdb)
-
-    @singledispatchmethod
-    def __getitem__(self, i: object) -> None:
-        raise NotImplementedError(f"Cannot index by {i.__class__}")  # pragma: nocover
-
-    @__getitem__.register(int)
-    def _get_one(self, i: int) -> int:
-        return cast(int, self._tdb[i].item())
-
-    @__getitem__.register(slice)
-    def _get_many(self, i: slice) -> List[int]:
-        return cast(List[int], self._tdb[i].tolist())
-
-
-class Header(Indexable):
-    def __len__(self) -> int:
-        return len(self._tdb)
-
-    @singledispatchmethod
-    def __getitem__(self, i: object) -> None:
-        raise NotImplementedError(f"Cannot index by {i.__class__}")  # pragma: nocover
-
-    @__getitem__.register(int)
-    def _get_one(self, i: int) -> Dict[str, int]:
-        return cast(Dict[str, int], self._tdb[i])
-
-    @__getitem__.register(slice)
-    def _get_many(self, i: slice) -> List[Dict[str, int]]:
-        headers = self._tdb[i]
-        keys = headers.keys()
-        columns = [v.tolist() for v in headers.values()]
-        return [dict(zip(keys, row)) for row in zip(*columns)]
-
-
-class Depth(Indexable):
-    def __len__(self) -> int:
-        return cast(int, self._tdb.shape[-1])
-
-    def __getitem__(self, i: Index) -> np.ndarray:
-        data = self._tdb[:, i]
-        return data.swapaxes(0, 1) if data.ndim == 2 else data
-
-
-class StructuredDepth(Depth):
-    def __getitem__(self, i: Index) -> np.ndarray:
-        # segyio depth doesn't support offsets (https://github.com/equinor/segyio/issues/474), pick the first one
-        try:
-            data = self._tdb[..., 0, i]
-        except IndexError as ex:
-            raise TypeError(
-                f"depth indices must be integers or slices, not {i.__class__.__name__}"
-            ) from ex
-
-        if data.ndim == 3:
-            # (fast, slow, samples) -> (samples, fast, slow)
-            data = data.swapaxes(0, 2).swapaxes(1, 2)
-        return data
-
-
 class Trace(Indexable):
     def __len__(self) -> int:
         return cast(int, np.asarray(self._tdb.shape[:-1]).prod())
@@ -124,6 +62,43 @@ class Trace(Indexable):
             if point in points
         ]
         return traces[selected_product_indices]
+
+
+class Header(Indexable):
+    def __len__(self) -> int:
+        return len(self._tdb)
+
+    @singledispatchmethod
+    def __getitem__(self, i: object) -> None:
+        raise NotImplementedError(f"Cannot index by {i.__class__}")  # pragma: nocover
+
+    @__getitem__.register(int)
+    def _get_one(self, i: int) -> Dict[str, int]:
+        return cast(Dict[str, int], self._tdb[i])
+
+    @__getitem__.register(slice)
+    def _get_many(self, i: slice) -> List[Dict[str, int]]:
+        headers = self._tdb[i]
+        keys = headers.keys()
+        columns = [v.tolist() for v in headers.values()]
+        return [dict(zip(keys, row)) for row in zip(*columns)]
+
+
+class Attributes(Indexable):
+    def __len__(self) -> int:
+        return len(self._tdb)
+
+    @singledispatchmethod
+    def __getitem__(self, i: object) -> None:
+        raise NotImplementedError(f"Cannot index by {i.__class__}")  # pragma: nocover
+
+    @__getitem__.register(int)
+    def _get_one(self, i: int) -> int:
+        return cast(int, self._tdb[i].item())
+
+    @__getitem__.register(slice)
+    def _get_many(self, i: slice) -> List[int]:
+        return cast(List[int], self._tdb[i].tolist())
 
 
 class Line(Indexable):
@@ -182,3 +157,28 @@ class Line(Indexable):
         return data
 
     _dims = property(lambda self: [dim.name for dim in self._tdb.schema.domain])
+
+
+class Depth(Indexable):
+    def __len__(self) -> int:
+        return cast(int, self._tdb.shape[-1])
+
+    def __getitem__(self, i: Index) -> np.ndarray:
+        data = self._tdb[:, i]
+        return data.swapaxes(0, 1) if data.ndim == 2 else data
+
+
+class StructuredDepth(Depth):
+    def __getitem__(self, i: Index) -> np.ndarray:
+        # segyio depth doesn't support offsets (https://github.com/equinor/segyio/issues/474), pick the first one
+        try:
+            data = self._tdb[..., 0, i]
+        except IndexError as ex:
+            raise TypeError(
+                f"depth indices must be integers or slices, not {i.__class__.__name__}"
+            ) from ex
+
+        if data.ndim == 3:
+            # (fast, slow, samples) -> (samples, fast, slow)
+            data = data.swapaxes(0, 2).swapaxes(1, 2)
+        return data
