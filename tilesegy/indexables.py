@@ -66,7 +66,7 @@ class Trace(Indexable):
 
 class Header(Indexable):
     def __len__(self) -> int:
-        return len(self._tdb)
+        return cast(int, np.asarray(self._shape).prod())
 
     @singledispatchmethod
     def __getitem__(self, i: object) -> None:
@@ -74,14 +74,41 @@ class Header(Indexable):
 
     @__getitem__.register(int)
     def _get_one(self, i: int) -> Dict[str, int]:
-        return cast(Dict[str, int], self._tdb[i])
+        return cast(Dict[str, int], self._tdb[np.unravel_index(i, self._shape)])
 
     @__getitem__.register(slice)
     def _get_many(self, i: slice) -> List[Dict[str, int]]:
-        headers = self._tdb[i]
+        shape = self._shape
+        if len(shape) == 1:
+            # unstructured tilesegy: already indexed by trace
+            headers = self._tdb[i]
+        else:
+            # get indices in 1D (trace index) and 3D (fast-slow-offset indices)
+            raveled_indices = np.arange(len(self))[i]
+            unraveled_indices = np.unravel_index(raveled_indices, shape)
+            unique_unraveled_indices = tuple(map(np.unique, unraveled_indices))
+
+            # find the requested subset of indices from the cartesian product
+            points = frozenset(zip(*unraveled_indices))
+            selected_product_indices = [
+                i
+                for i, point in enumerate(it.product(*unique_unraveled_indices))
+                if point in points
+            ]
+
+            # get the hypercube (fast-slow-offset-samples) for the cartesian product of
+            # unique_unraveled_indices and reshape it to 2D (trace-samples)
+            headers = self._tdb[tuple(map(ensure_slice, unique_unraveled_indices))]
+            for key, value in headers.items():
+                headers[key] = value.reshape(-1)[selected_product_indices]
+
         keys = headers.keys()
         columns = [v.tolist() for v in headers.values()]
         return [dict(zip(keys, row)) for row in zip(*columns)]
+
+    @property
+    def _shape(self) -> Tuple[int, ...]:
+        return cast(Tuple[int, ...], self._tdb.shape)
 
 
 class Attributes(Indexable):

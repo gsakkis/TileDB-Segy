@@ -115,13 +115,18 @@ class TestTileSegyTrace:
                     t.trace[sl, sl2], segy_gen_to_array(s.trace[sl, sl2])
                 )
 
-    @parametrize_tilesegy_segyfiles("t", "s", structured=False)
+    @parametrize_tilesegy_segyfiles("t", "s")
     def test_header(self, t: TileSegy, s: SegyFile) -> None:
         i = np.random.randint(0, s.tracecount // 2)
-        j = i + 20
+        size = 30
+
         assert len(t.header) == len(s.header)
         assert t.header[i] == stringify_keys(s.header[i])
-        assert t.header[i:j] == list(map(stringify_keys, s.header[i:j]))
+        assert t.header[:size] == list(map(stringify_keys, s.header[:size]))
+        assert t.header[-size:] == list(map(stringify_keys, s.header[-size:]))
+        assert t.header[i : i + size] == list(
+            map(stringify_keys, s.header[i : i + size])
+        )
 
     @parametrize_tilesegy_segyfiles("t", "s", structured=False)
     def test_attributes(self, t: TileSegy, s: SegyFile) -> None:
