@@ -128,7 +128,7 @@ class TestTileSegyTrace:
             map(stringify_keys, s.header[i : i + size])
         )
 
-    @parametrize_tilesegy_segyfiles("t", "s", structured=False)
+    @parametrize_tilesegy_segyfiles("t", "s")
     def test_attributes(self, t: TileSegy, s: SegyFile) -> None:
         str_attr = "TraceNumber"
         t_attrs = t.attributes(str_attr)
@@ -137,9 +137,9 @@ class TestTileSegyTrace:
         i = np.random.randint(0, s.tracecount // 2)
         j = np.random.randint(i + 1, s.tracecount)
         assert len(t_attrs) == len(s_attrs)
-        assert t_attrs[i] == s_attrs[i]
+        assert_equal_arrays(t_attrs[i], s_attrs[i])
         for sl in iter_slices(i, j):
-            assert t_attrs[sl] == s_attrs[sl].tolist()
+            assert_equal_arrays(t_attrs[sl], s_attrs[sl])
 
 
 class TestTileSegyDepth:

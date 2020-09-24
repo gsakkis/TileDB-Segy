@@ -111,21 +111,33 @@ class Header(Indexable):
         return cast(Tuple[int, ...], self._tdb.shape)
 
 
-class Attributes(Indexable):
-    def __len__(self) -> int:
-        return len(self._tdb)
+class Attributes(Header):
+    def __getitem__(self, i: Index) -> np.ndarray:
+        # for single sample segyio returns an array of size 1 instead of scalar
+        i = ensure_slice(i)
 
-    @singledispatchmethod
-    def __getitem__(self, i: object) -> None:
-        raise NotImplementedError(f"Cannot index by {i.__class__}")  # pragma: nocover
+        shape = self._shape
+        if len(shape) == 1:
+            # unstructured tilesegy: already indexed by trace
+            return self._tdb[i]
+        else:
+            # get indices in 1D (trace index) and 3D (fast-slow-offset indices)
+            raveled_indices = np.arange(len(self))[i]
+            unraveled_indices = np.unravel_index(raveled_indices, shape)
+            unique_unraveled_indices = tuple(map(np.unique, unraveled_indices))
 
-    @__getitem__.register(int)
-    def _get_one(self, i: int) -> int:
-        return cast(int, self._tdb[i].item())
+            # find the requested subset of indices from the cartesian product
+            points = frozenset(zip(*unraveled_indices))
+            selected_product_indices = [
+                i
+                for i, point in enumerate(it.product(*unique_unraveled_indices))
+                if point in points
+            ]
 
-    @__getitem__.register(slice)
-    def _get_many(self, i: slice) -> List[int]:
-        return cast(List[int], self._tdb[i].tolist())
+            # get the hypercube (fast-slow-offset-samples) for the cartesian product of
+            # unique_unraveled_indices and reshape it to 2D (trace-samples)
+            values = self._tdb[tuple(map(ensure_slice, unique_unraveled_indices))]
+            return values.reshape(-1)[selected_product_indices]
 
 
 class Line(Indexable):
@@ -197,7 +209,8 @@ class Depth(Indexable):
 
 class StructuredDepth(Depth):
     def __getitem__(self, i: Index) -> np.ndarray:
-        # segyio depth doesn't support offsets (https://github.com/equinor/segyio/issues/474), pick the first one
+        # segyio depth doesn't currently support offsets; pick the first one
+        # https://github.com/equinor/segyio/issues/474
         try:
             data = self._tdb[..., 0, i]
         except IndexError as ex:
