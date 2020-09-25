@@ -184,7 +184,11 @@ class TestStructuredTileSegy:
     @pytest.mark.parametrize("line,lines", [("iline", "ilines"), ("xline", "xlines")])
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
     def test_line_get(
-        self, line: str, lines: str, t: StructuredTileSegy, s: SegyFile,
+        self,
+        line: str,
+        lines: str,
+        t: StructuredTileSegy,
+        s: SegyFile,
     ) -> None:
         t_line, s_line = getattr(t, line), getattr(s, line)
         i, j = np.sort(np.random.choice(getattr(s, lines), 2, replace=False))

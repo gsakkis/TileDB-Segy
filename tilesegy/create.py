@@ -207,7 +207,10 @@ class StructuredSegyFileConverter(SegyFileConverter):
                 tile=self._fast_tile(trace_size),
             ),
             tiledb.Dim(
-                name=slow_dim, domain=(0, slow_lines - 1), dtype=dtype, tile=slow_lines,
+                name=slow_dim,
+                domain=(0, slow_lines - 1),
+                dtype=dtype,
+                tile=slow_lines,
             ),
             tiledb.Dim(
                 name="offsets",

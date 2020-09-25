@@ -142,7 +142,11 @@ class Attributes(Header):
 
 class Line(Indexable):
     def __init__(
-        self, dim_name: str, labels: np.ndarray, offsets: np.ndarray, tdb: tiledb.Array,
+        self,
+        dim_name: str,
+        labels: np.ndarray,
+        offsets: np.ndarray,
+        tdb: tiledb.Array,
     ):
         super().__init__(tdb)
         self._dim_name = dim_name
