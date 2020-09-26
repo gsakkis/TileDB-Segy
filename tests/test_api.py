@@ -81,14 +81,10 @@ class TestTileSegy:
         else:
             assert repr(t) == f"StructuredTileSegy('{str(t.uri)}')"
 
-
-class TestTileSegyTrace:
     @parametrize_tilesegy_segyfiles("t", "s")
-    def test_len(self, t: TileSegy, s: SegyFile) -> None:
+    def test_trace(self, t: TileSegy, s: SegyFile) -> None:
         assert len(t.trace) == len(s.trace) == s.tracecount
 
-    @parametrize_tilesegy_segyfiles("t", "s")
-    def test_get(self, t: TileSegy, s: SegyFile) -> None:
         i = np.random.randint(0, s.tracecount // 2)
         j = np.random.randint(i + 1, s.tracecount)
         x = np.random.randint(0, len(s.samples) // 2)
@@ -120,10 +116,10 @@ class TestTileSegyTrace:
 
     @parametrize_tilesegy_segyfiles("t", "s")
     def test_header(self, t: TileSegy, s: SegyFile) -> None:
+        assert len(t.header) == len(s.header)
+
         i = np.random.randint(0, s.tracecount // 2)
         size = 30
-
-        assert len(t.header) == len(s.header)
         assert t.header[i] == stringify_keys(s.header[i])
         try:
             assert t.header[:size] == list(map(stringify_keys, s.header[:size]))
@@ -139,10 +135,10 @@ class TestTileSegyTrace:
         str_attr = "TraceNumber"
         t_attrs = t.attributes(str_attr)
         s_attrs = s.attributes(getattr(TraceField, str_attr))
+        assert len(t_attrs) == len(s_attrs)
 
         i = np.random.randint(0, s.tracecount // 2)
         j = np.random.randint(i + 1, s.tracecount)
-        assert len(t_attrs) == len(s_attrs)
         assert_equal_arrays(t_attrs[i], s_attrs[i])
         for sl in iter_slices(i, j):
             try:
@@ -150,14 +146,10 @@ class TestTileSegyTrace:
             except NotImplementedError as ex:
                 pytest.xfail(str(ex))
 
-
-class TestTileSegyDepth:
     @parametrize_tilesegy_segyfiles("t", "s")
-    def test_len(self, t: StructuredTileSegy, s: SegyFile) -> None:
+    def test_depth(self, t: StructuredTileSegy, s: SegyFile) -> None:
         assert len(t.depth) == len(s.depth_slice)
 
-    @parametrize_tilesegy_segyfiles("t", "s")
-    def test_get(self, t: StructuredTileSegy, s: SegyFile) -> None:
         i = np.random.randint(0, len(s.samples) // 2)
         j = np.random.randint(i + 1, len(s.samples))
         # one depth
@@ -185,14 +177,9 @@ class TestStructuredTileSegy:
     def test_lines(self, lines: str, t: StructuredTileSegy, s: SegyFile) -> None:
         assert_equal_arrays(getattr(t, lines), getattr(s, lines))
 
-    @pytest.mark.parametrize("line", ["iline", "xline"])
-    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_line_len(self, line: str, t: StructuredTileSegy, s: SegyFile) -> None:
-        assert len(getattr(t, line)) == len(getattr(s, line))
-
     @pytest.mark.parametrize("line,lines", [("iline", "ilines"), ("xline", "xlines")])
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_line_get(
+    def test_line(
         self,
         line: str,
         lines: str,
@@ -200,6 +187,8 @@ class TestStructuredTileSegy:
         s: SegyFile,
     ) -> None:
         t_line, s_line = getattr(t, line), getattr(s, line)
+        assert len(t_line) == len(s_line)
+
         i, j = np.sort(np.random.choice(getattr(s, lines), 2, replace=False))
         x = np.random.choice(s.offsets)
 
