@@ -6,8 +6,7 @@ import numpy as np
 import tiledb
 from segyio import TraceSortingFormat
 
-from . import indexables as idx
-from .indexables import Indexable
+from .indexables import Attributes, Depth, Header, Line, StructuredDepth, Trace
 from .utils import StructuredTraceIndexer, TraceIndexer
 
 
@@ -45,21 +44,21 @@ class TileSegy:
         return self._meta_to_numpy("samples")
 
     @property
-    def trace(self) -> Indexable:
-        return idx.Trace(self._data, self._indexer_cls)
+    def trace(self) -> Trace:
+        return Trace(self._data, self._indexer_cls)
 
     @property
-    def header(self) -> Indexable:
-        return idx.Header(self._headers, self._indexer_cls)
+    def header(self) -> Header:
+        return Header(self._headers, self._indexer_cls)
 
-    def attributes(self, name: str) -> Indexable:
-        return idx.Attributes(
+    def attributes(self, name: str) -> Attributes:
+        return Attributes(
             tiledb.DenseArray(self._headers.uri, attr=name), self._indexer_cls
         )
 
     @property
-    def depth(self) -> Indexable:
-        return idx.Depth(self._data)
+    def depth(self) -> Depth:
+        return Depth(self._data)
 
     def close(self) -> None:
         self._headers.close()
@@ -89,15 +88,15 @@ class StructuredTileSegy(TileSegy):
     _indexer_cls = StructuredTraceIndexer
 
     @property
-    def iline(self) -> Indexable:
-        return idx.Line("ilines", self.ilines, self.offsets, self._data)
+    def iline(self) -> Line:
+        return Line("ilines", self.ilines, self.offsets, self._data)
 
     @property
-    def xline(self) -> Indexable:
-        return idx.Line("xlines", self.xlines, self.offsets, self._data)
+    def xline(self) -> Line:
+        return Line("xlines", self.xlines, self.offsets, self._data)
 
     @property
-    def fast(self) -> Indexable:
+    def fast(self) -> Line:
         if self.sorting == TraceSortingFormat.INLINE_SORTING:
             return self.iline
         if self.sorting == TraceSortingFormat.CROSSLINE_SORTING:
@@ -105,8 +104,8 @@ class StructuredTileSegy(TileSegy):
         raise RuntimeError(f"Unknown sorting {self.sorting}")  # pragma: nocover
 
     @property
-    def depth(self) -> Indexable:
-        return idx.StructuredDepth(self._data)
+    def depth(self) -> Depth:
+        return StructuredDepth(self._data)
 
     @property
     def offsets(self) -> np.ndarray:

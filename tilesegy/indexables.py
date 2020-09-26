@@ -1,5 +1,4 @@
-from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Tuple, Type, Union, cast
+from typing import Dict, List, Tuple, Type, Union, cast
 
 import numpy as np
 import tiledb
@@ -8,17 +7,7 @@ from ._singledispatchmethod import singledispatchmethod  # type: ignore
 from .utils import Index, Int, LabelIndexer, TraceIndexer, ensure_slice
 
 
-class Indexable(ABC):
-    @abstractmethod
-    def __len__(self) -> int:
-        ...  # pragma: nocover
-
-    @abstractmethod
-    def __getitem__(self, i: Index) -> Any:
-        ...  # pragma: nocover
-
-
-class TraceIndexable(Indexable):
+class TraceIndexable:
     def __init__(self, tdb: tiledb.Array, indexer: TraceIndexer):
         self._tdb = tdb
         self._indexer = indexer
@@ -76,7 +65,7 @@ class Attributes(TraceIndexable):
         return self._tdb[bounding_box].reshape(-1)[post_reshape_indices]
 
 
-class Line(Indexable):
+class Line:
     def __init__(
         self,
         dim_name: str,
@@ -138,7 +127,7 @@ class Line(Indexable):
     _dims = property(lambda self: [dim.name for dim in self._tdb.schema.domain])
 
 
-class Depth(Indexable):
+class Depth:
     def __init__(self, tdb: tiledb.Array):
         self._tdb = tdb
 
