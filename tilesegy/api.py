@@ -8,9 +8,12 @@ from segyio import TraceSortingFormat
 
 from . import indexables as idx
 from .indexables import Indexable
+from .utils import StructuredTraceIndexer, TraceIndexer
 
 
 class TileSegy:
+    _indexer_cls: Type[TraceIndexer] = TraceIndexer
+
     def __init__(self, uri: Path, headers: tiledb.Array, data: tiledb.Array):
         self._uri = uri
         self._headers = headers
@@ -43,14 +46,16 @@ class TileSegy:
 
     @property
     def trace(self) -> Indexable:
-        return idx.Trace(self._data)
+        return idx.Trace(self._data, self._indexer_cls)
 
     @property
     def header(self) -> Indexable:
-        return idx.Header(self._headers)
+        return idx.Header(self._headers, self._indexer_cls)
 
     def attributes(self, name: str) -> Indexable:
-        return idx.Attributes(tiledb.DenseArray(self._headers.uri, attr=name))
+        return idx.Attributes(
+            tiledb.DenseArray(self._headers.uri, attr=name), self._indexer_cls
+        )
 
     @property
     def depth(self) -> Indexable:
@@ -81,6 +86,8 @@ class TileSegy:
 
 
 class StructuredTileSegy(TileSegy):
+    _indexer_cls = StructuredTraceIndexer
+
     @property
     def iline(self) -> Indexable:
         return idx.Line("ilines", self.ilines, self.offsets, self._data)

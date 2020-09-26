@@ -1,11 +1,74 @@
-__all__ = ["LabelIndexer", "ensure_slice"]
-
+import itertools as it
 from functools import singledispatch
-from typing import Union
+from typing import TYPE_CHECKING, List, Tuple, Union
 
 import numpy as np
 
 from ._singledispatchmethod import singledispatchmethod  # type: ignore
+
+# https://github.com/python/typing/issues/684#issuecomment-548203158
+if TYPE_CHECKING:  # pragma: nocover
+    from enum import Enum
+
+    class ellipsis(Enum):
+        Ellipsis = "..."
+
+    Ellipsis = ellipsis.Ellipsis
+else:
+    ellipsis = type(Ellipsis)
+
+
+Int = Union[int, np.integer]
+Index = Union[Int, slice]
+
+
+class TraceIndexer:
+    def __init__(self, shape: Tuple[int, ...]):
+        self._shape = shape
+
+    def __len__(self) -> int:
+        return int(np.asarray(self._shape).prod())
+
+    def __getitem__(
+        self, trace_index: Index
+    ) -> Tuple[Tuple[Index, ...], Union[List[int], ellipsis]]:
+        """
+        Given a trace index, return a `(bounding_box, post_reshape_indices)` tuple where:
+        - `bounding_box` is a tuple of (int or slice) indices for each dimension in shape that
+          enclose all data of the requested `trace_index`.
+        - `post_reshape_indices` is a list of indices to select from the reshaped 1-dimensional
+          bounding box in order to get the requested `trace_index` data. It may also be ellipsis
+          (...) if the whole bounding box is to be selected.
+        """
+        return (trace_index,), Ellipsis
+
+
+class StructuredTraceIndexer(TraceIndexer):
+    @singledispatchmethod
+    def __getitem__(self, i: object) -> None:
+        raise NotImplementedError(f"Cannot index by {i.__class__}")  # pragma: nocover
+
+    @__getitem__.register(int)
+    @__getitem__.register(np.integer)
+    def _get_one(self, trace_index: Int) -> Tuple[Tuple[int, ...], ellipsis]:
+        return np.unravel_index(trace_index, self._shape), Ellipsis
+
+    @__getitem__.register(slice)
+    def _get_many(self, trace_index: slice) -> Tuple[Tuple[slice, ...], List[int]]:
+        # get indices in 1D (trace index) and 3D (fast-slow-offset indices)
+        raveled_indices = np.arange(len(self))[trace_index]
+        unraveled_indices = np.unravel_index(raveled_indices, self._shape)
+        unique_unraveled_indices = tuple(map(np.unique, unraveled_indices))
+        bounding_box = tuple(map(ensure_slice, unique_unraveled_indices))
+
+        # find the requested subset of indices from the cartesian product
+        points = frozenset(zip(*unraveled_indices))
+        post_reshape_indices = [
+            i
+            for i, point in enumerate(it.product(*unique_unraveled_indices))
+            if point in points
+        ]
+        return bounding_box, post_reshape_indices
 
 
 class LabelIndexer:
@@ -20,7 +83,12 @@ class LabelIndexer:
         self._sorter = labels.argsort()
 
     @singledispatchmethod
-    def __getitem__(self, label: int) -> int:
+    def __getitem__(self, i: object) -> None:
+        raise NotImplementedError(f"Cannot index by {i.__class__}")  # pragma: nocover
+
+    @__getitem__.register(int)
+    @__getitem__.register(np.integer)
+    def _get_one(self, label: Int) -> int:
         indices = np.flatnonzero(label == self._labels)
         assert indices.size <= 1, indices
         if indices.size == 0:
@@ -28,7 +96,7 @@ class LabelIndexer:
         return int(indices[0])
 
     @__getitem__.register(slice)
-    def _get_slice(self, label_slice: slice) -> slice:
+    def _get_many(self, label_slice: slice) -> slice:
         start, stop, step = label_slice.start, label_slice.stop, label_slice.step
         min_label = self._min_label
         if step is None or step > 0:  # increasing step
@@ -58,7 +126,7 @@ def ensure_slice_identity(s: slice) -> slice:
 
 @ensure_slice.register(int)
 @ensure_slice.register(np.integer)
-def ensure_slice_int(i: Union[int, np.integer]) -> slice:
+def ensure_slice_int(i: Int) -> slice:
     return slice(i, i + 1)
 
 

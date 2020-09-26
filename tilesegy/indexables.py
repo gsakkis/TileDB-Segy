@@ -1,20 +1,14 @@
-import itertools as it
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Tuple, Union, cast
+from typing import Any, Dict, List, Tuple, Type, Union, cast
 
 import numpy as np
 import tiledb
 
 from ._singledispatchmethod import singledispatchmethod  # type: ignore
-from .utils import LabelIndexer, ensure_slice
-
-Index = Union[int, np.integer, slice]
+from .utils import Index, Int, LabelIndexer, TraceIndexer, ensure_slice
 
 
 class Indexable(ABC):
-    def __init__(self, tdb: tiledb.Array):
-        self._tdb = tdb
-
     @abstractmethod
     def __len__(self) -> int:
         ...  # pragma: nocover
@@ -24,43 +18,18 @@ class Indexable(ABC):
         ...  # pragma: nocover
 
 
-class BaseTrace(Indexable):
+class TraceIndexable(Indexable):
+    def __init__(self, tdb: tiledb.Array, indexer: TraceIndexer):
+        self._tdb = tdb
+        self._indexer = indexer
+
     def __len__(self) -> int:
-        return cast(int, np.asarray(self._shape).prod())
-
-    @property
-    def _shape(self) -> Tuple[int, ...]:
-        return cast(Tuple[int, ...], self._tdb.shape)
-
-    def _unravel_index(self, i: Index) -> Tuple[Any, Any]:
-        shape = self._shape
-
-        if len(shape) == 1:
-            return (i,), ...
-
-        if isinstance(i, int):
-            return np.unravel_index(i, shape), ...
-
-        # get indices in 1D (trace index) and 3D (fast-slow-offset indices)
-        raveled_indices = np.arange(len(self))[i]
-        unraveled_indices = np.unravel_index(raveled_indices, shape)
-        unique_unraveled_indices = tuple(map(np.unique, unraveled_indices))
-        slices = tuple(map(ensure_slice, unique_unraveled_indices))
-
-        # find the requested subset of indices from the cartesian product
-        points = frozenset(zip(*unraveled_indices))
-        valid_indices = [
-            i
-            for i, point in enumerate(it.product(*unique_unraveled_indices))
-            if point in points
-        ]
-        return slices, valid_indices
+        return len(self._indexer)
 
 
-class Trace(BaseTrace):
-    @property
-    def _shape(self) -> Tuple[int, ...]:
-        return cast(Tuple[int, ...], self._tdb.shape[:-1])
+class Trace(TraceIndexable):
+    def __init__(self, tdb: tiledb.Array, indexer_cls: Type[TraceIndexer]):
+        super().__init__(tdb, indexer_cls(tdb.shape[:-1]))
 
     def __getitem__(self, i: Union[Index, Tuple[Index, Index]]) -> np.ndarray:
         if isinstance(i, tuple):
@@ -69,35 +38,42 @@ class Trace(BaseTrace):
         else:
             trace_index, samples = i, slice(None)
 
-        slices, valid_indices = self._unravel_index(trace_index)
-        traces = self._tdb[(*slices, samples)]
+        bounding_box, post_reshape_indices = self._indexer[trace_index]
+        traces = self._tdb[(*bounding_box, samples)]
         if len(traces.shape) > 2:
             traces = traces.reshape(np.array(traces.shape[:-1]).prod(), -1)
-        return traces[valid_indices]
+        return traces[post_reshape_indices]
 
 
-class Header(BaseTrace):
+class Header(TraceIndexable):
+    def __init__(self, tdb: tiledb.Array, indexer_cls: Type[TraceIndexer]):
+        super().__init__(tdb, indexer_cls(tdb.shape))
+
     @singledispatchmethod
     def __getitem__(self, i: object) -> None:
         raise NotImplementedError(f"Cannot index by {i.__class__}")  # pragma: nocover
 
     @__getitem__.register(int)
-    def _get_one(self, i: int) -> Dict[str, int]:
+    @__getitem__.register(np.integer)
+    def _get_one(self, i: Int) -> Dict[str, int]:
         return cast(Dict[str, int], self[ensure_slice(i)][0])
 
     @__getitem__.register(slice)
     def _get_many(self, i: slice) -> List[Dict[str, int]]:
-        slices, valid_indices = self._unravel_index(i)
-        header_arrays = self._tdb[slices]
+        bounding_box, post_reshape_indices = self._indexer[i]
+        header_arrays = self._tdb[bounding_box]
         keys = header_arrays.keys()
-        columns = [header_arrays[key].reshape(-1)[valid_indices] for key in keys]
+        columns = [header_arrays[key].reshape(-1)[post_reshape_indices] for key in keys]
         return [dict(zip(keys, row)) for row in zip(*columns)]
 
 
-class Attributes(BaseTrace):
+class Attributes(TraceIndexable):
+    def __init__(self, tdb: tiledb.Array, indexer_cls: Type[TraceIndexer]):
+        super().__init__(tdb, indexer_cls(tdb.shape))
+
     def __getitem__(self, i: Index) -> np.ndarray:
-        slices, valid_indices = self._unravel_index(ensure_slice(i))
-        return self._tdb[slices].reshape(-1)[valid_indices]
+        bounding_box, post_reshape_indices = self._indexer[ensure_slice(i)]
+        return self._tdb[bounding_box].reshape(-1)[post_reshape_indices]
 
 
 class Line(Indexable):
@@ -108,7 +84,7 @@ class Line(Indexable):
         offsets: np.ndarray,
         tdb: tiledb.Array,
     ):
-        super().__init__(tdb)
+        self._tdb = tdb
         self._dim_name = dim_name
         self._label_indexer = LabelIndexer(labels)
         self._offset_indexer = LabelIndexer(offsets)
@@ -163,6 +139,9 @@ class Line(Indexable):
 
 
 class Depth(Indexable):
+    def __init__(self, tdb: tiledb.Array):
+        self._tdb = tdb
+
     def __len__(self) -> int:
         return cast(int, self._tdb.shape[-1])
 
