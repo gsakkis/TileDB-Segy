@@ -285,18 +285,18 @@ class TestStructuredTileSegy:
         j = np.random.randint(i + 1, len(s.samples))
         x = np.random.choice(s.offsets)
 
-        t_depth = t.depth
-        s_depth = s.depth_slice
         # one line, x offset
-        for depth in t_depth, s_depth:
-            with pytest.raises(TypeError):
-                depth[i, x]
+        with pytest.raises(IndexError):
+            t.depth[i, x]
+        with pytest.raises(TypeError):
+            s.depth_slice[i, x]
 
         for sl in iter_slices(i, j):
             # slice lines, x offset
-            for depth in t_depth, s_depth:
-                with pytest.raises(TypeError):
-                    depth[sl, x]
+            with pytest.raises(IndexError):
+                t.depth[sl, x]
+            with pytest.raises(TypeError):
+                s.depth_slice[sl, x]
 
     @parametrize_tilesegy_segyfiles("t", "s", structured=True, multiple_offsets=True)
     def test_depth_multiple_offsets(self, t: StructuredTileSegy, s: SegyFile) -> None:
@@ -305,17 +305,16 @@ class TestStructuredTileSegy:
         i = np.random.randint(0, len(s.samples) // 2)
         j = np.random.randint(i + 1, len(s.samples))
 
-        t_depth = t.depth
-        s_depth = s.depth_slice
-
         for sl2 in iter_slices(s.offsets[1], s.offsets[3]):
             # one depth, slice offsets
-            for depth in t_depth, s_depth:
-                with pytest.raises(TypeError):
-                    depth[i, sl2]
+            with pytest.raises(IndexError):
+                t.depth[i, sl2]
+            with pytest.raises(TypeError):
+                s.depth_slice[i, sl2]
 
             for sl1 in iter_slices(i, j):
                 # slice depths, slice offsets
-                for depth in t_depth, s_depth:
-                    with pytest.raises(TypeError):
-                        depth[sl1, sl2]
+                with pytest.raises(IndexError):
+                    t.depth[sl1, sl2]
+                with pytest.raises(TypeError):
+                    s.depth_slice[sl1, sl2]

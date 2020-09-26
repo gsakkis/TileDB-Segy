@@ -161,21 +161,13 @@ class Depth:
         return cast(int, self._tdb.shape[-1])
 
     def __getitem__(self, i: Index) -> np.ndarray:
-        data = self._tdb[:, i]
-        # (traces, samples) -> (samples, traces)
-        return np.moveaxis(data, 1, 0) if data.ndim == 2 else data
-
-
-class StructuredDepth(Depth):
-    def __getitem__(self, i: Index) -> np.ndarray:
-        # segyio depth doesn't currently support offsets; pick the first one
-        # https://github.com/equinor/segyio/issues/474
-        try:
+        ndim = self._tdb.ndim
+        if ndim > 2:
+            # segyio doesn't currently support offset indexing for depth; always selects the first
+            # https://github.com/equinor/segyio/issues/474
             data = self._tdb[..., 0, i]
-        except IndexError as ex:
-            raise TypeError(
-                f"depth indices must be integers or slices, not {i.__class__.__name__}"
-            ) from ex
-
-        # (fast, slow, samples) -> (samples, fast, slow)
-        return np.moveaxis(data, 2, 0) if data.ndim == 3 else data
+            ndim -= 1
+        else:
+            data = self._tdb[..., i]
+        # move samples as first dimension
+        return np.moveaxis(data, -1, 0) if data.ndim == ndim else data
