@@ -109,7 +109,7 @@ class Line:
         try:
             labels_axis = dims.index(labels_dim)
             if labels_axis != 0:
-                data = data.swapaxes(0, labels_axis)
+                data = np.moveaxis(data, labels_axis, 0)
                 labels_axis = 0
         except ValueError:
             labels_axis = -1
@@ -118,7 +118,7 @@ class Line:
         try:
             offsets_axis = dims.index(offsets_dim)
             if offsets_axis != labels_axis + 1:
-                data = data.swapaxes(labels_axis + 1, offsets_axis)
+                data = np.moveaxis(data, offsets_axis, labels_axis + 1)
         except ValueError:
             pass
 
@@ -136,7 +136,8 @@ class Depth:
 
     def __getitem__(self, i: Index) -> np.ndarray:
         data = self._tdb[:, i]
-        return data.swapaxes(0, 1) if data.ndim == 2 else data
+        # (traces, samples) -> (samples, traces)
+        return np.moveaxis(data, 1, 0) if data.ndim == 2 else data
 
 
 class StructuredDepth(Depth):
@@ -150,7 +151,5 @@ class StructuredDepth(Depth):
                 f"depth indices must be integers or slices, not {i.__class__.__name__}"
             ) from ex
 
-        if data.ndim == 3:
-            # (fast, slow, samples) -> (samples, fast, slow)
-            data = data.swapaxes(0, 2).swapaxes(1, 2)
-        return data
+        # (fast, slow, samples) -> (samples, fast, slow)
+        return np.moveaxis(data, 2, 0) if data.ndim == 3 else data
