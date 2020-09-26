@@ -55,7 +55,7 @@ class TestEnsureSlice:
 
     @pytest.mark.parametrize("a", [(1, 5, 7, 9), (10, 7, 6, 5)])
     def test_invalid_array_non_fixed_step(self, a):
-        assert pytest.raises(ValueError, ensure_slice, np.array(a, int))
+        assert pytest.raises(NotImplementedError, ensure_slice, np.array(a, int))
 
     @pytest.mark.parametrize("a", [(2, 3, 4), (1, 5, 9, 13), (1, 0, -1), (7, 4, 1, -2)])
     def test_valid_array(self, a):

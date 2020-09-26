@@ -148,8 +148,8 @@ def ensure_slice_array(a: np.ndarray) -> slice:
         )
     unique_diffs = np.unique(diffs)
     if len(unique_diffs) > 1:
-        raise ValueError(
-            "Array with non-fixed step between elements cannot be converted to slice"
+        raise NotImplementedError(
+            "Arrays that cannot be converted to a single slice are not currently supported"
         )
 
     start = a[0]

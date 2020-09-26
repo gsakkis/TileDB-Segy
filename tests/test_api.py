@@ -105,15 +105,18 @@ class TestTileSegyTrace:
             assert_equal_arrays(t.trace[i, sl], s.trace[i, sl])
 
         for sl in iter_slices(i, j):
-            # slices traces, all samples
-            assert_equal_arrays(t.trace[sl], segy_gen_to_array(s.trace[sl]))
-            # slices traces, one sample
-            assert_equal_arrays(t.trace[sl, x], segy_gen_to_array(s.trace[sl, x]))
-            # slices traces, slice samples
-            for sl2 in iter_slices(x, y):
-                assert_equal_arrays(
-                    t.trace[sl, sl2], segy_gen_to_array(s.trace[sl, sl2])
-                )
+            try:
+                # slices traces, all samples
+                assert_equal_arrays(t.trace[sl], segy_gen_to_array(s.trace[sl]))
+                # slices traces, one sample
+                assert_equal_arrays(t.trace[sl, x], segy_gen_to_array(s.trace[sl, x]))
+                # slices traces, slice samples
+                for sl2 in iter_slices(x, y):
+                    assert_equal_arrays(
+                        t.trace[sl, sl2], segy_gen_to_array(s.trace[sl, sl2])
+                    )
+            except NotImplementedError as ex:
+                pytest.xfail(str(ex))
 
     @parametrize_tilesegy_segyfiles("t", "s")
     def test_header(self, t: TileSegy, s: SegyFile) -> None:
@@ -122,11 +125,14 @@ class TestTileSegyTrace:
 
         assert len(t.header) == len(s.header)
         assert t.header[i] == stringify_keys(s.header[i])
-        assert t.header[:size] == list(map(stringify_keys, s.header[:size]))
-        assert t.header[-size:] == list(map(stringify_keys, s.header[-size:]))
-        assert t.header[i : i + size] == list(
-            map(stringify_keys, s.header[i : i + size])
-        )
+        try:
+            assert t.header[:size] == list(map(stringify_keys, s.header[:size]))
+            assert t.header[-size:] == list(map(stringify_keys, s.header[-size:]))
+            assert t.header[i : i + size] == list(
+                map(stringify_keys, s.header[i : i + size])
+            )
+        except NotImplementedError as ex:
+            pytest.xfail(str(ex))
 
     @parametrize_tilesegy_segyfiles("t", "s")
     def test_attributes(self, t: TileSegy, s: SegyFile) -> None:
@@ -139,7 +145,10 @@ class TestTileSegyTrace:
         assert len(t_attrs) == len(s_attrs)
         assert_equal_arrays(t_attrs[i], s_attrs[i])
         for sl in iter_slices(i, j):
-            assert_equal_arrays(t_attrs[sl], s_attrs[sl])
+            try:
+                assert_equal_arrays(t_attrs[sl], s_attrs[sl])
+            except NotImplementedError as ex:
+                pytest.xfail(str(ex))
 
 
 class TestTileSegyDepth:
