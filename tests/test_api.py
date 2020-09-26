@@ -226,6 +226,57 @@ class TestStructuredTileSegy:
                 # segyio flattens the (lines, offsets) dimensions - unflatten them
                 assert_equal_arrays(sliced_t, sliced_s.reshape(sliced_t.shape))
 
+    @pytest.mark.parametrize("line,lines", [("iline", "ilines"), ("xline", "xlines")])
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    def test_header_line(
+        self,
+        line: str,
+        lines: str,
+        t: StructuredTileSegy,
+        s: SegyFile,
+    ) -> None:
+        t_line, s_line = getattr(t.header, line), getattr(s.header, line)
+        assert len(t_line) == len(s_line)
+
+        lines = getattr(s, lines)
+        i = np.random.choice(lines)
+        x = np.random.choice(s.offsets)
+
+        # one line, first offset
+        assert t_line[i] == stringify_keys(s_line[i])
+        # one line, x offset
+        assert t_line[i, x] == stringify_keys(s_line[i, x])
+
+        for sl in slice(None, lines[2]), slice(lines[-2], None), slice(i, i + 2):
+            # slice lines, first offset
+            assert t_line[sl] == stringify_keys(s_line[sl])
+            # slice lines, x offset
+            assert t_line[sl, x] == stringify_keys(s_line[sl, x])
+
+    @pytest.mark.parametrize("line,lines", [("iline", "ilines"), ("xline", "xlines")])
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True, multiple_offsets=True)
+    def test_header_line_multiple_offsets(
+        self,
+        line: str,
+        lines: str,
+        t: StructuredTileSegy,
+        s: SegyFile,
+    ) -> None:
+        t_line, s_line = getattr(t.header, line), getattr(s.header, line)
+        lines = getattr(s, lines)
+        i = np.random.choice(lines)
+        o1, o2 = s.offsets[1], s.offsets[3]
+        for sl2 in slice(None, o1), slice(o2, None), slice(o1, o2):
+            # one line, slice offsets
+            assert t_line[i, sl2] == stringify_keys(s_line[i, sl2])
+
+            for sl1 in slice(None, lines[2]), slice(lines[-2], None), slice(i, i + 2):
+                # slice lines, slice offsets
+                # segyio flattens the (lines, offsets) dimensions
+                t_line_sliced = [line for lines in t_line[sl1, sl2] for line in lines]
+                s_line_sliced = stringify_keys(s_line[sl1, sl2])
+                assert t_line_sliced == s_line_sliced
+
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
     def test_depth(self, t: StructuredTileSegy, s: SegyFile) -> None:
         # segyio doesn't currently support offset indexing for depth

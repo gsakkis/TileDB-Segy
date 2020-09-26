@@ -6,6 +6,8 @@ import tiledb
 from ._singledispatchmethod import singledispatchmethod  # type: ignore
 from .utils import Index, Int, LabelIndexer, TraceIndexer, ensure_slice
 
+Field = Dict[str, int]
+
 
 class TraceIndexable:
     def __init__(self, tdb: tiledb.Array, indexer: TraceIndexer):
@@ -44,11 +46,11 @@ class Header(TraceIndexable):
 
     @__getitem__.register(int)
     @__getitem__.register(np.integer)
-    def _get_one(self, i: Int) -> Dict[str, int]:
-        return cast(Dict[str, int], self[ensure_slice(i)][0])
+    def _get_one(self, i: Int) -> Field:
+        return cast(Field, self[ensure_slice(i)][0])
 
     @__getitem__.register(slice)
-    def _get_many(self, i: slice) -> List[Dict[str, int]]:
+    def _get_many(self, i: slice) -> List[Field]:
         bounding_box, post_reshape_indices = self._indexer[i]
         header_arrays = self._tdb[bounding_box]
         keys = header_arrays.keys()
@@ -90,16 +92,24 @@ class Line:
             labels, offsets = i
         else:
             labels, offsets = i, self._default_offset
+        data = self._tdb[self._get_tdb_indices(labels, offsets)]
+        data = self._moveaxis(data, labels, offsets)
+        return data
 
-        offsets_dim = "offsets"
-        labels_dim = self._dim_name
+    _dims = property(lambda self: [dim.name for dim in self._tdb.schema.domain])
+
+    def _get_tdb_indices(self, labels: Index, offsets: Index) -> Tuple[Index, ...]:
         dims = self._dims
+        composite_index: List[Index] = [slice(None)] * self._tdb.ndim
+        composite_index[dims.index(self._dim_name)] = self._label_indexer[labels]
+        composite_index[dims.index("offsets")] = self._offset_indexer[offsets]
+        return tuple(composite_index)
 
-        composite_index: List[Index] = [slice(None)] * 4
-        composite_index[dims.index(labels_dim)] = self._label_indexer[labels]
-        composite_index[dims.index(offsets_dim)] = self._offset_indexer[offsets]
-        data = self._tdb[tuple(composite_index)]
+    def _moveaxis(self, data: np.ndarray, labels: Index, offsets: Index) -> np.ndarray:
+        labels_dim = self._dim_name
+        offsets_dim = "offsets"
 
+        dims = self._dims
         if not isinstance(labels, slice):
             dims.remove(labels_dim)
         if not isinstance(offsets, slice):
@@ -124,7 +134,23 @@ class Line:
 
         return data
 
-    _dims = property(lambda self: [dim.name for dim in self._tdb.schema.domain])
+
+NestedFieldList = Union[List[Field], List[List[Field]], List[List[List[Field]]]]
+
+
+class HeaderLine(Line):
+    def __getitem__(self, i: Union[Index, Tuple[Index, Index]]) -> NestedFieldList:
+        if isinstance(i, tuple):
+            labels, offsets = i
+        else:
+            labels, offsets = i, self._default_offset
+        header_dicts = self._tdb[self._get_tdb_indices(labels, offsets)]
+        header_keys = header_dicts.keys()
+        data = np.stack(header_dicts.values())
+        data = np.moveaxis(data, 0, -1)
+        data = self._moveaxis(data, labels, offsets)
+        data = np.apply_along_axis(lambda v: dict(zip(header_keys, v)), -1, data)
+        return cast(NestedFieldList, data.tolist())
 
 
 class Depth:

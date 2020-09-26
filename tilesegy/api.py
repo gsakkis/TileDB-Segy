@@ -1,12 +1,21 @@
 from pathlib import Path
 from types import TracebackType
-from typing import Dict, List, Optional, Type, Union
+from typing import List, Optional, Type, Union
 
 import numpy as np
 import tiledb
 from segyio import TraceSortingFormat
 
-from .indexables import Attributes, Depth, Header, Line, StructuredDepth, Trace
+from .indexables import (
+    Attributes,
+    Depth,
+    Field,
+    Header,
+    HeaderLine,
+    Line,
+    StructuredDepth,
+    Trace,
+)
 from .utils import StructuredTraceIndexer, TraceIndexer
 
 
@@ -28,7 +37,7 @@ class TileSegy:
         return sorting if sorting != TraceSortingFormat.UNKNOWN_SORTING else None
 
     @property
-    def bin(self) -> Dict[str, int]:
+    def bin(self) -> Field:
         bin_headers = dict(self._headers.meta.items())
         del bin_headers["__text__"]
         return bin_headers
@@ -118,6 +127,14 @@ class StructuredTileSegy(TileSegy):
     @property
     def xlines(self) -> np.ndarray:
         return self._meta_to_numpy("xlines", dtype="intc")
+
+    @property
+    def header(self) -> Header:
+        header = super().header
+        for attr, name in ("iline", "ilines"), ("xline", "xlines"):
+            line = HeaderLine(name, getattr(self, name), self.offsets, self._headers)
+            setattr(header, attr, line)
+        return header
 
 
 def open(uri: Union[str, Path]) -> TileSegy:
