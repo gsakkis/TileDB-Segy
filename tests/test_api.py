@@ -1,5 +1,5 @@
-import itertools as it
-from typing import Iterator, Mapping, Union
+from functools import singledispatch
+from typing import Any, Iterable, List, Mapping, Union
 
 import numpy as np
 import pytest
@@ -7,40 +7,45 @@ from segyio import SegyFile, TraceField
 from tiledb.libtiledb import TileDBError
 
 import tilesegy
-from tests.conftest import parametrize_tilesegy_segyfiles, parametrize_tilesegys
+from tests.conftest import parametrize_tilesegy_segyfiles
 from tilesegy import StructuredTileSegy, TileSegy
 
 
 def assert_equal_arrays(
     a: Union[np.ndarray, np.number],
     b: Union[np.ndarray, np.number],
-    reshape: bool = False,
 ) -> None:
     assert a.dtype == b.dtype
     if isinstance(a, np.number) or isinstance(b, np.number):
         assert isinstance(a, np.number) and isinstance(b, np.number)
         assert a == b
-    elif not reshape:
+    else:
         assert a.ndim == b.ndim
         assert a.shape == b.shape
-    else:
-        assert a.ndim == b.ndim + 1
-        assert a.shape[0] * a.shape[1] == b.shape[0]
-        assert a.shape[-2:] == b.shape[-2:]
-        b = b.reshape(a.shape)
     np.testing.assert_array_equal(a, b)
 
 
-def segy_gen_to_array(segy_gen: Iterator[np.ndarray]) -> np.ndarray:
+def segy_gen_to_array(segy_gen: Iterable[np.ndarray]) -> np.ndarray:
     return np.array(list(map(np.copy, segy_gen)))
 
 
-def stringify_keys(d: Mapping[int, int]) -> Mapping[str, int]:
+@singledispatch
+def stringify_keys(o: object) -> Any:
+    raise NotImplementedError(f"Cannot stringify_keys for {o.__class__}")
+
+
+@stringify_keys.register(Mapping)
+def _stringify_keys_mapping(d: Mapping[int, int]) -> Mapping[str, int]:
     return {str(k): v for k, v in d.items()}
 
 
-def iter_slices(i: int, j: int) -> Iterator[slice]:
-    return (slice(*bounds) for bounds in it.product((None, i), (None, j)))
+@stringify_keys.register(Iterable)
+def _stringify_keys_iter(s: Iterable[Mapping[int, int]]) -> List[Mapping[str, int]]:
+    return list(map(stringify_keys, s))
+
+
+def iter_slices(i: int, j: int) -> Iterable[slice]:
+    return slice(None, None), slice(None, j), slice(i, None), slice(i, j)
 
 
 class TestTileSegy:
@@ -60,15 +65,15 @@ class TestTileSegy:
     def test_samples(self, t: TileSegy, s: SegyFile) -> None:
         assert_equal_arrays(t.samples, s.samples)
 
-    @parametrize_tilesegys("t")
-    def test_close(self, t: TileSegy) -> None:
+    @parametrize_tilesegy_segyfiles("t", "s")
+    def test_close(self, t: TileSegy, s: SegyFile) -> None:
         t.bin
         t.close()
         with pytest.raises(TileDBError):
             t.bin
 
-    @parametrize_tilesegys("t")
-    def test_context_manager(self, t: TileSegy) -> None:
+    @parametrize_tilesegy_segyfiles("t", "s")
+    def test_context_manager(self, t: TileSegy, s: SegyFile) -> None:
         with tilesegy.open(t.uri) as t2:
             t2.bin
         with pytest.raises(TileDBError):
@@ -100,16 +105,16 @@ class TestTileSegy:
         for sl in iter_slices(x, y):
             assert_equal_arrays(t.trace[i, sl], s.trace[i, sl])
 
-        for sl in iter_slices(i, j):
+        for sl1 in iter_slices(i, j):
             try:
                 # slices traces, all samples
-                assert_equal_arrays(t.trace[sl], segy_gen_to_array(s.trace[sl]))
+                assert_equal_arrays(t.trace[sl1], segy_gen_to_array(s.trace[sl1]))
                 # slices traces, one sample
-                assert_equal_arrays(t.trace[sl, x], segy_gen_to_array(s.trace[sl, x]))
+                assert_equal_arrays(t.trace[sl1, x], segy_gen_to_array(s.trace[sl1, x]))
                 # slices traces, slice samples
                 for sl2 in iter_slices(x, y):
                     assert_equal_arrays(
-                        t.trace[sl, sl2], segy_gen_to_array(s.trace[sl, sl2])
+                        t.trace[sl1, sl2], segy_gen_to_array(s.trace[sl1, sl2])
                     )
             except NotImplementedError as ex:
                 pytest.xfail(str(ex))
@@ -119,16 +124,12 @@ class TestTileSegy:
         assert len(t.header) == len(s.header)
 
         i = np.random.randint(0, s.tracecount // 2)
-        size = 30
         assert t.header[i] == stringify_keys(s.header[i])
-        try:
-            assert t.header[:size] == list(map(stringify_keys, s.header[:size]))
-            assert t.header[-size:] == list(map(stringify_keys, s.header[-size:]))
-            assert t.header[i : i + size] == list(
-                map(stringify_keys, s.header[i : i + size])
-            )
-        except NotImplementedError as ex:
-            pytest.xfail(str(ex))
+        for sl in slice(None, 3), slice(-3, None), slice(i, i + 3):
+            try:
+                assert t.header[sl] == stringify_keys(s.header[sl])
+            except NotImplementedError as ex:
+                pytest.xfail(str(ex))
 
     @parametrize_tilesegy_segyfiles("t", "s")
     def test_attributes(self, t: TileSegy, s: SegyFile) -> None:
@@ -203,23 +204,32 @@ class TestStructuredTileSegy:
             # slice lines, x offset
             assert_equal_arrays(t_line[sl, x], segy_gen_to_array(s_line[sl, x]))
 
-            if len(s.offsets) > 1:
-                x, y = s.offsets[1], s.offsets[3]
-                for sl2 in iter_slices(x, y):
-                    # one line, slice offsets
-                    assert_equal_arrays(
-                        t_line[i, sl2], segy_gen_to_array(s_line[i, sl2])
-                    )
-                    # slice lines, slice offsets
-                    assert_equal_arrays(
-                        t_line[sl, sl2],
-                        segy_gen_to_array(s_line[sl, sl2]),
-                        reshape=True,
-                    )
+    @pytest.mark.parametrize("line,lines", [("iline", "ilines"), ("xline", "xlines")])
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True, multiple_offsets=True)
+    def test_line_multiple_offsets(
+        self,
+        line: str,
+        lines: str,
+        t: StructuredTileSegy,
+        s: SegyFile,
+    ) -> None:
+        t_line, s_line = getattr(t, line), getattr(s, line)
+        i, j = np.sort(np.random.choice(getattr(s, lines), 2, replace=False))
+        for sl2 in iter_slices(s.offsets[1], s.offsets[3]):
+            # one line, slice offsets
+            assert_equal_arrays(t_line[i, sl2], segy_gen_to_array(s_line[i, sl2]))
+
+            for sl1 in iter_slices(i, j):
+                # slice lines, slice offsets
+                sliced_t = t_line[sl1, sl2]
+                sliced_s = segy_gen_to_array(s_line[sl1, sl2])
+                # segyio flattens the (lines, offsets) dimensions - unflatten them
+                assert_equal_arrays(sliced_t, sliced_s.reshape(sliced_t.shape))
 
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_depth_offsets(self, t: StructuredTileSegy, s: SegyFile) -> None:
+    def test_depth(self, t: StructuredTileSegy, s: SegyFile) -> None:
         # segyio doesn't currently support offset indexing for depth
+        # https://github.com/equinor/segyio/issues/474
         i = np.random.randint(0, len(s.samples) // 2)
         j = np.random.randint(i + 1, len(s.samples))
         x = np.random.choice(s.offsets)
@@ -237,15 +247,24 @@ class TestStructuredTileSegy:
                 with pytest.raises(TypeError):
                     depth[sl, x]
 
-            if len(s.offsets) > 1:
-                x, y = s.offsets[1], s.offsets[3]
-                for sl2 in iter_slices(x, y):
-                    # one line, slice offsets
-                    for depth in t_depth, s_depth:
-                        with pytest.raises(TypeError):
-                            depth[i, sl2]
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True, multiple_offsets=True)
+    def test_depth_multiple_offsets(self, t: StructuredTileSegy, s: SegyFile) -> None:
+        # segyio doesn't currently support offset indexing for depth
+        # https://github.com/equinor/segyio/issues/474
+        i = np.random.randint(0, len(s.samples) // 2)
+        j = np.random.randint(i + 1, len(s.samples))
 
-                    # slice lines, slice offsets
-                    for depth in t_depth, s_depth:
-                        with pytest.raises(TypeError):
-                            depth[sl, sl2]
+        t_depth = t.depth
+        s_depth = s.depth_slice
+
+        for sl2 in iter_slices(s.offsets[1], s.offsets[3]):
+            # one depth, slice offsets
+            for depth in t_depth, s_depth:
+                with pytest.raises(TypeError):
+                    depth[i, sl2]
+
+            for sl1 in iter_slices(i, j):
+                # slice depths, slice offsets
+                for depth in t_depth, s_depth:
+                    with pytest.raises(TypeError):
+                        depth[sl1, sl2]

@@ -33,9 +33,12 @@ STRUCTURED_SEGY_COMBOS = {
 }
 
 
-def iter_segyfiles(structured: Optional[bool] = None) -> Iterator[SegyFile]:
+def iter_segyfiles(
+    structured: Optional[bool] = None, multiple_offsets: Optional[bool] = None
+) -> Iterator[SegyFile]:
     if structured is None:
-        yield from it.chain(iter_segyfiles(False), iter_segyfiles(True))
+        yield from iter_segyfiles(False, multiple_offsets)
+        yield from iter_segyfiles(True, multiple_offsets)
         return
 
     generate_segy: Callable[..., None]
@@ -48,6 +51,12 @@ def iter_segyfiles(structured: Optional[bool] = None) -> Iterator[SegyFile]:
     keys = combos.keys()
     for values in it.product(*combos.values()):
         kwargs = dict(zip(keys, values))
+        if (
+            structured
+            and multiple_offsets is not None
+            and bool(multiple_offsets) == (kwargs["offsets"] < 2)
+        ):
+            continue
         filename = "-".join("{}={}".format(*item) for item in kwargs.items()) + ".sgy"
         path = FIXTURES_DIR / filename
         if not path.exists():
@@ -66,22 +75,17 @@ def get_tilesegy(segy_file: SegyFile) -> TileSegy:
     return tilesegy.open(path)
 
 
-def parametrize_tilesegys(tilesegy_name: str, structured: Optional[bool] = None) -> Any:
-    return pytest.mark.parametrize(
-        tilesegy_name,
-        map(get_tilesegy, iter_segyfiles(structured)),
-        ids=lambda t: Path(t.uri).stem,
-    )
-
-
 def parametrize_tilesegy_segyfiles(
-    tilesegy_name: str, segyfile_name: str, structured: Optional[bool] = None
+    tilesegy_name: str,
+    segyfile_name: str,
+    structured: Optional[bool] = None,
+    multiple_offsets: Optional[bool] = None,
 ) -> Any:
     return pytest.mark.parametrize(
         (tilesegy_name, segyfile_name),
         (
             (get_tilesegy(segy_file), segy_file)
-            for segy_file in iter_segyfiles(structured)
+            for segy_file in iter_segyfiles(structured, multiple_offsets)
         ),
         ids=lambda x: Path(x.uri).stem if isinstance(x, TileSegy) else None,
     )
