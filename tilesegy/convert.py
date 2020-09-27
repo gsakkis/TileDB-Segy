@@ -1,5 +1,4 @@
 import copy
-import os
 from abc import ABC, abstractmethod
 from collections import namedtuple
 from contextlib import contextmanager
@@ -266,25 +265,3 @@ def iter_slices(size: int, step: int) -> Iterator[slice]:
     r = range(0, size, step)
     yield from map(slice, r, r[1:])
     yield slice(r[-1], size)
-
-
-def main() -> None:
-    import shutil
-    import sys
-
-    import segyio
-
-    segy_file, output_dir = sys.argv[1:]
-    if os.path.isdir(output_dir):
-        shutil.rmtree(output_dir)
-
-    with segyio.open(segy_file, strict=False) as segy_file:
-        SegyFileConverter(  # type: ignore
-            segy_file,
-            tile_size=4 * 1024 ** 2,
-            config=tiledb.Config({"sm.consolidation.buffer_size": 500000}),
-        ).to_tiledb(output_dir)
-
-
-if __name__ == "__main__":
-    main()
