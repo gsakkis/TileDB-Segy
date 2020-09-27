@@ -8,7 +8,7 @@ try:
     singledispatchmethod = functools.singledispatchmethod
 except AttributeError:
 
-    class singledispatchmethod(object):
+    class singledispatchmethod:
         """Single-dispatch generic method descriptor."""
 
         def __init__(self, func):

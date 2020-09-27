@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, List, Tuple, Union
 
 import numpy as np
 
-from ._singledispatchmethod import singledispatchmethod  # type: ignore
+from .singledispatchmethod import singledispatchmethod  # type: ignore
 
 # https://github.com/python/typing/issues/684#issuecomment-548203158
 if TYPE_CHECKING:  # pragma: nocover

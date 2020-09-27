@@ -3,7 +3,7 @@ from typing import Dict, List, Tuple, Type, Union, cast
 import numpy as np
 import tiledb
 
-from ._singledispatchmethod import singledispatchmethod  # type: ignore
+from .singledispatchmethod import singledispatchmethod  # type: ignore
 from .utils import Index, Int, LabelIndexer, TraceIndexer, ensure_slice
 
 Field = Dict[str, int]
