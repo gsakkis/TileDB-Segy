@@ -1,9 +1,10 @@
 from functools import singledispatch
 from typing import Any, Iterable, List, Mapping, Union
+from unittest.mock import PropertyMock, patch
 
 import numpy as np
 import pytest
-from segyio import SegyFile, TraceField
+from segyio import SegyFile, TraceField, TraceSortingFormat
 from tiledb.libtiledb import TileDBError
 
 import tilesegy
@@ -181,6 +182,14 @@ class TestStructuredTileSegy:
         else:
             assert s.fast is s.xline
             assert str(t.fast) == "Line('xlines')"
+
+        with patch.object(
+            StructuredTileSegy,
+            "sorting",
+            PropertyMock(return_value=TraceSortingFormat.UNKNOWN_SORTING),
+        ):
+            with pytest.raises(RuntimeError):
+                t.fast
 
     @pytest.mark.parametrize("lines", ["ilines", "xlines"])
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)

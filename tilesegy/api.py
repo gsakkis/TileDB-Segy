@@ -101,7 +101,7 @@ class StructuredTileSegy(TileSegy):
             return self.iline
         if self.sorting == TraceSortingFormat.CROSSLINE_SORTING:
             return self.xline
-        raise RuntimeError(f"Unknown sorting {self.sorting}")  # pragma: nocover
+        raise RuntimeError(f"Unknown sorting {self.sorting}")
 
     @property
     def offsets(self) -> np.ndarray:
