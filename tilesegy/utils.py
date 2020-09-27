@@ -83,8 +83,8 @@ class LabelIndexer:
         if len(np.unique(labels)) != len(labels):
             raise ValueError(f"labels should not contain duplicates: {labels}")
         self._labels = labels
-        self._min_label = labels.min()
-        self._max_label = labels.max() + 1
+        self._min_label = int(labels.min())
+        self._max_label = int(labels.max() + 1)
         self._sorter = labels.argsort()
 
     @singledispatchmethod
@@ -102,6 +102,9 @@ class LabelIndexer:
 
     @__getitem__.register(slice)
     def _get_many(self, label_slice: slice) -> slice:
+        return ensure_slice(self._label_slice_to_indices(label_slice))
+
+    def _label_slice_to_indices(self, label_slice: slice) -> np.ndarray:
         start, stop, step = label_slice.start, label_slice.stop, label_slice.step
         min_label = self._min_label
         if step is None or step > 0:  # increasing step
@@ -115,8 +118,7 @@ class LabelIndexer:
         indices = self._sorter[
             self._labels.searchsorted(label_range, sorter=self._sorter)
         ]
-        indices = indices[self._labels[indices] == label_range]
-        return ensure_slice(indices)
+        return indices[self._labels[indices] == label_range]
 
 
 @singledispatch
