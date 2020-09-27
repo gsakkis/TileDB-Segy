@@ -42,7 +42,7 @@ class Header(TraceIndexable):
 
     @singledispatchmethod
     def __getitem__(self, i: object) -> None:
-        raise NotImplementedError(f"Cannot index by {i.__class__}")  # pragma: nocover
+        raise TypeError(f"Cannot index by {i.__class__}")
 
     @__getitem__.register(int)
     @__getitem__.register(np.integer)

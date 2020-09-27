@@ -31,7 +31,7 @@ def segy_gen_to_array(segy_gen: Iterable[np.ndarray]) -> np.ndarray:
 
 @singledispatch
 def stringify_keys(o: object) -> Any:
-    raise NotImplementedError(f"Cannot stringify_keys for {o.__class__}")
+    raise TypeError(f"Cannot stringify_keys for {o.__class__}")
 
 
 @stringify_keys.register(Mapping)
@@ -119,6 +119,9 @@ class TestTileSegy:
             except NotImplementedError as ex:
                 pytest.xfail(str(ex))
 
+        with pytest.raises((IndexError, TypeError)):
+            t.trace[float(i), 0]
+
     @parametrize_tilesegy_segyfiles("t", "s")
     def test_header(self, t: TileSegy, s: SegyFile) -> None:
         assert len(t.header) == len(s.header)
@@ -130,6 +133,9 @@ class TestTileSegy:
                 assert t.header[sl] == stringify_keys(s.header[sl])
             except NotImplementedError as ex:
                 pytest.xfail(str(ex))
+
+        with pytest.raises(TypeError):
+            t.header[i, 0]
 
     @parametrize_tilesegy_segyfiles("t", "s")
     def test_attributes(self, t: TileSegy, s: SegyFile) -> None:
@@ -146,6 +152,9 @@ class TestTileSegy:
                 assert_equal_arrays(t_attrs[sl], s_attrs[sl])
             except NotImplementedError as ex:
                 pytest.xfail(str(ex))
+
+        with pytest.raises(TypeError):
+            t_attrs[i, 0]
 
     @parametrize_tilesegy_segyfiles("t", "s")
     def test_depth(self, t: StructuredTileSegy, s: SegyFile) -> None:

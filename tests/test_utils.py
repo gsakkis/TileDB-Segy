@@ -7,7 +7,7 @@ from tilesegy.utils import ensure_slice
 class TestEnsureSlice:
     @pytest.mark.parametrize("obj", [None, 3.14, "hey"])
     def test_invalid_type(self, obj):
-        assert pytest.raises(NotImplementedError, ensure_slice, obj)
+        pytest.raises(TypeError, ensure_slice, obj)
 
     @pytest.mark.parametrize("start", [1, None])
     @pytest.mark.parametrize("stop", [10, None])

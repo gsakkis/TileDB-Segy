@@ -46,7 +46,7 @@ class TraceIndexer:
 class StructuredTraceIndexer(TraceIndexer):
     @singledispatchmethod
     def __getitem__(self, i: object) -> None:
-        raise NotImplementedError(f"Cannot index by {i.__class__}")  # pragma: nocover
+        raise TypeError(f"Cannot index by {i.__class__}")
 
     @__getitem__.register(int)
     @__getitem__.register(np.integer)
@@ -84,7 +84,7 @@ class LabelIndexer:
 
     @singledispatchmethod
     def __getitem__(self, i: object) -> None:
-        raise NotImplementedError(f"Cannot index by {i.__class__}")  # pragma: nocover
+        raise TypeError(f"Cannot index by {i.__class__}")
 
     @__getitem__.register(int)
     @__getitem__.register(np.integer)
@@ -116,7 +116,7 @@ class LabelIndexer:
 
 @singledispatch
 def ensure_slice(obj: object) -> slice:
-    raise NotImplementedError(f"Cannot convert {obj.__class__} to slice")
+    raise TypeError(f"Cannot convert {obj.__class__} to slice")
 
 
 @ensure_slice.register(slice)
