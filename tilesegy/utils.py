@@ -59,7 +59,12 @@ class StructuredTraceIndexer(TraceIndexer):
         raveled_indices = np.arange(len(self))[trace_index]
         unraveled_indices = np.unravel_index(raveled_indices, self._shape)
         unique_unraveled_indices = tuple(map(np.unique, unraveled_indices))
-        bounding_box = tuple(map(ensure_slice, unique_unraveled_indices))
+        try:
+            bounding_box = tuple(map(ensure_slice, unique_unraveled_indices))
+        except ValueError:
+            raise NotImplementedError(
+                "Multi-range subarrays are not currently supported"
+            )
 
         # find the requested subset of indices from the cartesian product
         points = frozenset(zip(*unraveled_indices))
@@ -133,9 +138,9 @@ def ensure_slice_int(i: Int) -> slice:
 @ensure_slice.register(np.ndarray)
 def ensure_slice_array(a: np.ndarray) -> slice:
     if not issubclass(a.dtype.type, np.integer):
-        raise ValueError("Non-integer arrays cannot be converted to slice")
+        raise ValueError("Non-integer array cannot be converted to slice")
     if a.ndim > 1:
-        raise ValueError(f"{a.ndim}D arrays cannot be converted to slice")
+        raise ValueError(f"{a.ndim}D array cannot be converted to slice")
     if a.ndim == 1 and len(a) == 0:
         raise ValueError("Empty array cannot be converted to slice")
     if a.ndim == 0 or len(a) == 1:
@@ -148,9 +153,7 @@ def ensure_slice_array(a: np.ndarray) -> slice:
         )
     unique_diffs = np.unique(diffs)
     if len(unique_diffs) > 1:
-        raise NotImplementedError(
-            "Arrays that cannot be converted to a single slice are not currently supported"
-        )
+        raise ValueError("Non-range array cannot be converted to a slice")
 
     start = a[0]
     step = unique_diffs[0]

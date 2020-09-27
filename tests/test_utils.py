@@ -39,23 +39,23 @@ class TestEnsureSlice:
     @pytest.mark.parametrize("dtype", [float, np.float32, np.bool_])
     def test_invalid_array_dtype(self, dtype):
         a = np.zeros(10, dtype=dtype)
-        assert pytest.raises(ValueError, ensure_slice, a)
+        pytest.raises(ValueError, ensure_slice, a)
 
     @pytest.mark.parametrize("shape", [(4, 5), (1, 5), (5, 1), (1, 2, 3)])
     def test_invalid_array_ndim(self, shape):
         a = np.zeros(shape, dtype=np.int32)
-        assert pytest.raises(ValueError, ensure_slice, a)
+        pytest.raises(ValueError, ensure_slice, a)
 
     def test_invalid_array_empty(self):
-        assert pytest.raises(ValueError, ensure_slice, np.array([], int))
+        pytest.raises(ValueError, ensure_slice, np.array([], int))
 
     @pytest.mark.parametrize("a", [(1, 5, 3, 2), (10, 5, 7, 8)])
     def test_invalid_array_non_monotonic(self, a):
-        assert pytest.raises(ValueError, ensure_slice, np.array(a, int))
+        pytest.raises(ValueError, ensure_slice, np.array(a, int))
 
     @pytest.mark.parametrize("a", [(1, 5, 7, 9), (10, 7, 6, 5)])
-    def test_invalid_array_non_fixed_step(self, a):
-        assert pytest.raises(NotImplementedError, ensure_slice, np.array(a, int))
+    def test_invalid_array_non_range(self, a):
+        pytest.raises(ValueError, ensure_slice, np.array(a, int))
 
     @pytest.mark.parametrize("a", [(2, 3, 4), (1, 5, 9, 13), (1, 0, -1), (7, 4, 1, -2)])
     def test_valid_array(self, a):
