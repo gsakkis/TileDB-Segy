@@ -6,7 +6,7 @@ from typing import Any, Mapping
 import numpy as np
 import segyio
 import tiledb
-from segyio import SegyFile
+from segyio import SegyFile, TraceSortingFormat
 
 
 def serialize_tilesegy(uri: str) -> Mapping[str, Any]:
@@ -14,6 +14,7 @@ def serialize_tilesegy(uri: str) -> Mapping[str, Any]:
 
     data_uri = os.path.join(uri, "data")
     with tiledb.DenseArray(data_uri) as tdb:
+        sorting = tdb.meta["sorting"]
         for key in "samples", "ilines", "xlines", "offsets":
             if tdb.schema.domain.has_dim(key):
                 value = tdb.meta[key]
@@ -40,22 +41,27 @@ def serialize_tilesegy(uri: str) -> Mapping[str, Any]:
         else:
             ilines = range(len(serialized["ilines"]))
             xlines = range(len(serialized["xlines"]))
+            if sorting == TraceSortingFormat.INLINE_SORTING:
+                fast, slow = ilines, xlines
+            else:
+                fast, slow = xlines, ilines
+
             offsets = range(len(serialized["offsets"]))
             if len(offsets) > 1:
 
-                def serialize_header(i: int, x: int) -> Any:
+                def serialize_header(f: int, s: int) -> Any:
                     return [
-                        {key: columns[k][i][x][o] for k, key in enumerate(keys)}
+                        {key: columns[k][f][s][o] for k, key in enumerate(keys)}
                         for o in offsets
                     ]
 
             else:
 
-                def serialize_header(i: int, x: int) -> Any:
-                    return {key: columns[k][i][x][0] for k, key in enumerate(keys)}
+                def serialize_header(f: int, s: int) -> Any:
+                    return {key: columns[k][f][s][0] for k, key in enumerate(keys)}
 
             serialized["headers"] = [
-                [serialize_header(i, x) for x in xlines] for i in ilines
+                [serialize_header(f, s) for s in slow] for f in fast
             ]
 
     return serialized
