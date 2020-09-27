@@ -9,7 +9,7 @@ from segyio import SegyFile, TraceSortingFormat
 
 import tilesegy
 from tilesegy import TileSegy
-from tilesegy.create import SegyFileConverter
+from tilesegy.convert import SegyFileConverter
 
 from .segyio_utils import generate_structured_segy, generate_unstructured_segy
 

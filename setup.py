@@ -9,7 +9,7 @@ setup(
     author_email="george.sakkis@gmail.com",
     packages=["tilesegy"],
     install_requires=["segyio", "tiledb"],
-    extras_require={"testing": ["pytest", "pytest-coverage"]},
+    extras_require={"testing": ["pytest", "pytest-coverage", "pytest-xdist"]},
     license="MIT",
     classifiers=[
         "Development Status :: 3 - Alpha",
