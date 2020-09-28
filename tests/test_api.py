@@ -177,11 +177,10 @@ class TestStructuredTileSegy:
 
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
     def test_fast(self, t: StructuredTileSegy, s: SegyFile) -> None:
-        if s.fast is s.iline:
-            assert str(t.fast) == "Line('ilines')"
+        if s.sorting == TraceSortingFormat.INLINE_SORTING:
+            assert t.fast.name == "ilines"
         else:
-            assert s.fast is s.xline
-            assert str(t.fast) == "Line('xlines')"
+            assert t.fast.name == "xlines"
 
         with patch.object(
             StructuredTileSegy,

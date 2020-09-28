@@ -75,17 +75,14 @@ class Line:
         offsets: np.ndarray,
         tdb: tiledb.Array,
     ):
+        self.name = dim_name
         self._tdb = tdb
-        self._dim_name = dim_name
         self._label_indexer = LabelIndexer(labels)
         self._offset_indexer = LabelIndexer(offsets)
         self._default_offset = offsets[0]
 
-    def __str__(self) -> str:
-        return f"{self.__class__.__name__}({self._dim_name!r})"
-
     def __len__(self) -> int:
-        return cast(int, self._tdb.shape[self._dims.index(self._dim_name)])
+        return cast(int, self._tdb.shape[self._dims.index(self.name)])
 
     def __getitem__(self, i: Union[Index, Tuple[Index, Index]]) -> np.ndarray:
         if isinstance(i, tuple):
@@ -101,12 +98,12 @@ class Line:
     def _get_tdb_indices(self, labels: Index, offsets: Index) -> Tuple[Index, ...]:
         dims = self._dims
         composite_index: List[Index] = [slice(None)] * self._tdb.ndim
-        composite_index[dims.index(self._dim_name)] = self._label_indexer[labels]
+        composite_index[dims.index(self.name)] = self._label_indexer[labels]
         composite_index[dims.index("offsets")] = self._offset_indexer[offsets]
         return tuple(composite_index)
 
     def _moveaxis(self, data: np.ndarray, labels: Index, offsets: Index) -> np.ndarray:
-        labels_dim = self._dim_name
+        labels_dim = self.name
         offsets_dim = "offsets"
 
         dims = self._dims
