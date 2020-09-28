@@ -10,7 +10,7 @@ setup(
     packages=["tilesegy"],
     install_requires=["segyio", "tiledb"],
     extras_require={"testing": ["pytest", "pytest-coverage", "pytest-xdist"]},
-    entry_points={"console_scripts": ["tilesegy=tilesegy.cli:main"]},
+    entry_points={"console_scripts": ["segy2tiledb=tilesegy.cli:main"]},
     license="MIT",
     classifiers=[
         "Development Status :: 3 - Alpha",
