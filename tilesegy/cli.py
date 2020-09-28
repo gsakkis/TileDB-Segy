@@ -17,7 +17,9 @@ class HelpFormatter(RawTextHelpFormatter, ArgumentDefaultsHelpFormatter):
 def get_parser() -> ArgumentParser:
     parser = ArgumentParser(formatter_class=HelpFormatter, description=__doc__)
     parser.add_argument("input", type=Path, help="Input segy file path")
-    parser.add_argument("output", type=Path, help="Output tilesegy directory path")
+    parser.add_argument(
+        "output", type=Path, nargs="?", help="Output tilesegy directory path"
+    )
     parser.add_argument(
         "-o",
         "--overwrite",
@@ -81,6 +83,9 @@ def get_parser() -> ArgumentParser:
 def main() -> None:
     parser = get_parser()
     args = parser.parse_args()
+
+    if not args.output:
+        args.output = args.input.with_suffix(".tsgy")
     if args.output.exists():
         if args.overwrite:
             shutil.rmtree(args.output)

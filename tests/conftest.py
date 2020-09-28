@@ -65,7 +65,7 @@ def iter_segyfiles(
 
 
 def get_tilesegy(segy_file: SegyFile) -> TileSegy:
-    path = Path(segy_file._filename).with_suffix(".tdb")
+    path = Path(segy_file._filename).with_suffix(".tsgy")
     if not path.exists():
         SegyFileConverter(  # type: ignore
             segy_file,
