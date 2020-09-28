@@ -33,12 +33,9 @@ def get_parser() -> ArgumentParser:
         choices=["auto", "structured", "unstructured"],
         default="auto",
         help="""Geometry of the converted tilesegy:
-- auto (default): same as the input segy.
-  Calls `segyio.open()` with `strict=False`.
+- auto: same as the input segy.
 - structured: same as `auto` but abort if a geometry cannot be inferred.
-  Calls `segyio.open()` with `strict=True`.
 - unstructured: opt out on building geometry information.
-  Calls `segyio.open()` with `ignore_geometry=True`.
 """,
     )
 
