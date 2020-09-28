@@ -129,7 +129,7 @@ class StructuredTileSegy(TileSegy):
 def open(uri: Union[str, Path]) -> TileSegy:
     uri = Path(uri) if not isinstance(uri, Path) else uri
     headers = tiledb.DenseArray(str(uri / "headers"))
-    data = tiledb.DenseArray(str(uri / "data"))
+    data = tiledb.DenseArray(str(uri / "data"), attr="trace")
     if data.schema.domain.has_dim("traces"):
         cls = TileSegy
     else:

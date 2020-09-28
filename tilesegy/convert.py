@@ -121,7 +121,11 @@ class SegyFileConverter(ABC):
         )
         return tiledb.ArraySchema(
             domain=tiledb.Domain(*dims),
-            attrs=[tiledb.Attr(dtype=self.segy_file.dtype)],
+            attrs=[
+                tiledb.Attr(
+                    "trace", self.segy_file.dtype, filters=(tiledb.LZ4Filter(),)
+                )
+            ],
         )
 
     @contextmanager
