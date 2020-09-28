@@ -43,6 +43,11 @@ def get_parser() -> ArgumentParser:
 
     segyio_args = parser.add_argument_group("segyio options")
     segyio_args.add_argument(
+        "--su",
+        action="store_true",
+        help="Open a seismic unix file instead of SEG-Y",
+    )
+    segyio_args.add_argument(
         "--iline",
         type=int,
         default=189,
@@ -109,7 +114,8 @@ def main() -> None:
             {"sm.consolidation.buffer_size": args.consolidation_buffersize}
         ),
     )
-    with segyio.open(**segyio_kwargs) as f:
+    open_seismic = segyio.su.open if args.su else segyio.open
+    with open_seismic(**segyio_kwargs) as f:
         converter = SegyFileConverter(f, **converter_kwargs)  # type: ignore
         converter.to_tiledb(args.output)
 
