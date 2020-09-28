@@ -8,7 +8,16 @@ import numpy as np
 import tiledb
 from segyio import TraceSortingFormat
 
-from .indexables import Attributes, Depth, Field, Header, HeaderLine, Line, Trace
+from .indexables import (
+    Attributes,
+    Depth,
+    Field,
+    Gather,
+    Header,
+    HeaderLine,
+    Line,
+    Trace,
+)
 from .utils import StructuredTraceIndexer, TraceIndexer
 
 
@@ -104,6 +113,10 @@ class StructuredTileSegy(TileSegy):
         if self.sorting == TraceSortingFormat.CROSSLINE_SORTING:
             return self.xline
         raise RuntimeError(f"Unknown sorting {self.sorting}")
+
+    @property
+    def gather(self) -> Gather:
+        return Gather(self.ilines, self.xlines, self.offsets, self._data)
 
     @property
     def offsets(self) -> np.ndarray:

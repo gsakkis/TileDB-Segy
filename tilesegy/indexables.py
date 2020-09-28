@@ -97,7 +97,7 @@ class Line:
 
     def _get_tdb_indices(self, labels: Index, offsets: Index) -> Tuple[Index, ...]:
         dims = self._dims
-        composite_index: List[Index] = [slice(None)] * self._tdb.ndim
+        composite_index = [slice(None)] * self._tdb.ndim
         composite_index[dims.index(self.name)] = self._label_indexer[labels]
         composite_index[dims.index("offsets")] = self._offset_indexer[offsets]
         return tuple(composite_index)
@@ -168,3 +168,41 @@ class Depth:
             data = self._tdb[..., i]
         # move samples as first dimension
         return np.moveaxis(data, -1, 0) if data.ndim == ndim else data
+
+
+class Gather:
+    def __init__(
+        self,
+        ilines: np.ndarray,
+        xlines: np.ndarray,
+        offsets: np.ndarray,
+        tdb: tiledb.Array,
+    ):
+        self._tdb = tdb
+        self._iline_indexer = LabelIndexer(ilines)
+        self._xline_indexer = LabelIndexer(xlines)
+        self._offset_indexer = LabelIndexer(offsets)
+        self._default_offset = offsets[0] if len(offsets) == 1 else slice(None)
+
+    def __getitem__(self, t: Tuple[Index, ...]) -> np.ndarray:
+        if len(t) == 3:
+            ilines, xlines, offsets = t
+        else:
+            ilines, xlines = t
+            offsets = self._default_offset
+
+        dims = tuple(dim.name for dim in self._tdb.schema.domain)
+        composite_index = [None] * 3
+        composite_index[dims.index("ilines")] = self._iline_indexer[ilines]
+        composite_index[dims.index("xlines")] = self._xline_indexer[xlines]
+        composite_index[dims.index("offsets")] = self._offset_indexer[offsets]
+
+        data = self._tdb[tuple(composite_index)]
+        # segyio returns always (ilines, xlines); convert from (fast, slow) if necessary
+        if (
+            dims[0] == "xlines"
+            and isinstance(ilines, slice)
+            and isinstance(xlines, slice)
+        ):
+            data = data.swapaxes(0, 1)
+        return data

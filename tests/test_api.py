@@ -10,23 +10,31 @@ from tiledb.libtiledb import TileDBError
 import tilesegy
 from tests.conftest import parametrize_tilesegy_segyfiles
 from tilesegy import StructuredTileSegy, TileSegy
+from tilesegy.utils import Index
 
 
 def assert_equal_arrays(
     a: Union[np.ndarray, np.number],
     b: Union[np.ndarray, np.number],
+    reshape: bool = False,
 ) -> None:
     assert a.dtype == b.dtype
     if isinstance(a, np.number) or isinstance(b, np.number):
         assert isinstance(a, np.number) and isinstance(b, np.number)
         assert a == b
+    elif reshape:
+        assert a.ndim == b.ndim + 1
+        assert a.shape[2:] == b.shape[1:]
+        b = b.reshape(a.shape)
     else:
         assert a.ndim == b.ndim
         assert a.shape == b.shape
     np.testing.assert_array_equal(a, b)
 
 
-def segy_gen_to_array(segy_gen: Iterable[np.ndarray]) -> np.ndarray:
+def segy_gen_to_array(segy_gen: Union[np.ndarray, Iterable[np.ndarray]]) -> np.ndarray:
+    if isinstance(segy_gen, np.ndarray):
+        return segy_gen
     return np.array(list(map(np.copy, segy_gen)))
 
 
@@ -238,10 +246,10 @@ class TestStructuredTileSegy:
 
             for sl1 in iter_slices(i, j):
                 # slice lines, slice offsets
-                sliced_t = t_line[sl1, sl2]
-                sliced_s = segy_gen_to_array(s_line[sl1, sl2])
-                # segyio flattens the (lines, offsets) dimensions - unflatten them
-                assert_equal_arrays(sliced_t, sliced_s.reshape(sliced_t.shape))
+                # segyio flattens the (lines, offsets) dimensions into one
+                assert_equal_arrays(
+                    t_line[sl1, sl2], segy_gen_to_array(s_line[sl1, sl2]), reshape=True
+                )
 
     @pytest.mark.parametrize("line,lines", [("iline", "ilines"), ("xline", "xlines")])
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
@@ -335,3 +343,54 @@ class TestStructuredTileSegy:
                     t.depth[sl1, sl2]
                 with pytest.raises(TypeError):
                     s.depth_slice[sl1, sl2]
+
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    def test_gather(self, t: StructuredTileSegy, s: SegyFile) -> None:
+        i = np.random.choice(s.ilines)
+        i_slices = [
+            slice(None, s.ilines[2]),
+            slice(s.ilines[-2], None),
+            slice(i, i + 2),
+        ]
+        x = np.random.choice(s.xlines)
+        x_slices = [
+            slice(None, s.xlines[3]),
+            slice(s.xlines[-3], None),
+            slice(x, x + 3),
+        ]
+
+        # single iline/xline
+        self._assert_equal_gather(t, s, i, x)
+
+        # single iline / slice xlines
+        for sl in x_slices:
+            self._assert_equal_gather(t, s, i, sl)
+
+        # slice ilines / single xlines
+        for sl in i_slices:
+            self._assert_equal_gather(t, s, sl, x)
+
+        # slice ilines/xlines
+        for sl1 in i_slices:
+            for sl2 in x_slices:
+                self._assert_equal_gather(t, s, sl1, sl2)
+
+    def _assert_equal_gather(
+        self, t: StructuredTileSegy, s: SegyFile, i: Index, x: Index
+    ) -> None:
+        o = s.offsets[0]
+        # segyio flattens the (ilines, xlines) dimensions into one
+        reshape = isinstance(i, slice) and isinstance(x, slice)
+        assert_equal_arrays(t.gather[i, x], segy_gen_to_array(s.gather[i, x]), reshape)
+        assert_equal_arrays(
+            t.gather[i, x, o], segy_gen_to_array(s.gather[i, x, o]), reshape
+        )
+        if len(s.offsets) > 1:
+            for sl in iter_slices(s.offsets[1], s.offsets[3]):
+                assert_equal_arrays(
+                    t.gather[i, x, sl], segy_gen_to_array(s.gather[i, x, sl]), reshape
+                )
+        else:
+            assert_equal_arrays(
+                t.gather[i, x, :], segy_gen_to_array(s.gather[i, x, :]), reshape
+            )
