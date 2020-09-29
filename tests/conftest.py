@@ -4,12 +4,10 @@ from typing import Any, Callable, Iterator, Optional
 
 import pytest
 import segyio
-import tiledb
 from segyio import SegyFile, TraceSortingFormat
 
 import tilesegy
-from tilesegy import TileSegy
-from tilesegy.convert import SegyFileConverter
+from tilesegy import TileSegy, cli
 
 from .segyio_utils import generate_structured_segy, generate_unstructured_segy
 
@@ -65,14 +63,11 @@ def iter_segyfiles(
 
 
 def get_tilesegy(segy_file: SegyFile) -> TileSegy:
-    path = Path(segy_file._filename).with_suffix(".tsgy")
-    if not path.exists():
-        SegyFileConverter(  # type: ignore
-            segy_file,
-            tile_size=1024 ** 2,
-            config=tiledb.Config({"sm.consolidation.buffer_size": 500000}),
-        ).to_tiledb(path)
-    return tilesegy.open(path)
+    inpath = Path(segy_file._filename)
+    outpath = inpath.with_suffix(".tsgy")
+    if not outpath.exists():
+        cli.main(list(map(str, [inpath, outpath])))
+    return tilesegy.open(outpath)
 
 
 def parametrize_tilesegy_segyfiles(

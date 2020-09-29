@@ -3,6 +3,7 @@
 import shutil
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, RawTextHelpFormatter
 from pathlib import Path
+from typing import List, Optional
 
 import segyio
 import tiledb
@@ -85,9 +86,9 @@ def get_parser() -> ArgumentParser:
     return parser
 
 
-def main() -> None:
+def main(argv: Optional[List[str]] = None) -> None:
     parser = get_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if not args.output:
         args.output = args.input.with_suffix(".tsgy")
