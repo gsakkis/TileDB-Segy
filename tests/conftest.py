@@ -1,9 +1,10 @@
 import itertools as it
 from pathlib import Path
-from typing import Any, Callable, Iterator, Optional
+from typing import Any, Callable, Iterator, Optional, Tuple
 
 import pytest
 import segyio
+from filelock import FileLock
 from segyio import SegyFile, TraceSortingFormat
 
 import tilesegy
@@ -31,12 +32,12 @@ STRUCTURED_SEGY_COMBOS = {
 }
 
 
-def iter_segyfiles(
+def iter_tsgy_sgy_files(
     structured: Optional[bool] = None, multiple_offsets: Optional[bool] = None
-) -> Iterator[SegyFile]:
+) -> Iterator[Tuple[TileSegy, SegyFile]]:
     if structured is None:
-        yield from iter_segyfiles(False, multiple_offsets)
-        yield from iter_segyfiles(True, multiple_offsets)
+        yield from iter_tsgy_sgy_files(False, multiple_offsets)
+        yield from iter_tsgy_sgy_files(True, multiple_offsets)
         return
 
     generate_segy: Callable[..., None]
@@ -46,28 +47,27 @@ def iter_segyfiles(
     else:
         combos = UNSTRUCTURED_SEGY_COMBOS
         generate_segy = generate_unstructured_segy
-    keys = combos.keys()
+
     for values in it.product(*combos.values()):
-        kwargs = dict(zip(keys, values))
+        kwargs = dict(zip(combos.keys(), values))
         if (
             structured
             and multiple_offsets is not None
             and bool(multiple_offsets) == (kwargs["offsets"] < 2)
         ):
             continue
-        filename = "-".join("{}={}".format(*item) for item in kwargs.items()) + ".sgy"
-        path = FIXTURES_DIR / filename
-        if not path.exists():
-            generate_segy(path, **kwargs)
-        yield segyio.open(path, ignore_geometry=not structured)
 
+        basename = "-".join("{}={}".format(*item) for item in kwargs.items())
+        sgy_path = FIXTURES_DIR / (basename + ".sgy")
+        tsgy_path = FIXTURES_DIR / (basename + ".tsgy")
 
-def get_tilesegy(segy_file: SegyFile) -> TileSegy:
-    inpath = Path(segy_file._filename)
-    outpath = inpath.with_suffix(".tsgy")
-    if not outpath.exists():
-        cli.main(list(map(str, [inpath, outpath])))
-    return tilesegy.open(outpath)
+        with FileLock(FIXTURES_DIR / (basename + ".lock")):
+            if not sgy_path.exists():
+                generate_segy(sgy_path, **kwargs)
+            if not tsgy_path.exists():
+                cli.main(list(map(str, [sgy_path, tsgy_path])))
+
+        yield tilesegy.open(tsgy_path), segyio.open(sgy_path, strict=False)
 
 
 def parametrize_tilesegy_segyfiles(
@@ -78,9 +78,6 @@ def parametrize_tilesegy_segyfiles(
 ) -> Any:
     return pytest.mark.parametrize(
         (tilesegy_name, segyfile_name),
-        (
-            (get_tilesegy(segy_file), segy_file)
-            for segy_file in iter_segyfiles(structured, multiple_offsets)
-        ),
+        iter_tsgy_sgy_files(structured, multiple_offsets),
         ids=lambda x: Path(x.uri).stem if isinstance(x, TileSegy) else None,
     )
