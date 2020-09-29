@@ -2,11 +2,16 @@ __all__ = ["open", "TileSegy", "StructuredTileSegy"]
 
 from pathlib import Path
 from types import TracebackType
-from typing import List, Optional, Type, Union
+from typing import TYPE_CHECKING, Optional, Tuple, Type, Union
 
 import numpy as np
 import tiledb
 from segyio import TraceSortingFormat
+
+if TYPE_CHECKING:  # pragma: nocover
+    cached_property = property
+else:
+    from cached_property import cached_property
 
 from .indexables import (
     Attributes,
@@ -33,32 +38,34 @@ class TileSegy:
     def uri(self) -> Path:
         return self._uri
 
-    @property
+    @cached_property
     def sorting(self) -> Optional[TraceSortingFormat]:
         sorting = TraceSortingFormat(self._data.meta["sorting"])
         return sorting if sorting != TraceSortingFormat.UNKNOWN_SORTING else None
 
-    @property
+    @cached_property
     def bin(self) -> Field:
         bin_headers = dict(self._headers.meta.items())
         del bin_headers["__text__"]
         return bin_headers
 
-    @property
-    def text(self) -> List[bytes]:
+    @cached_property
+    def text(self) -> Tuple[bytes, ...]:
         text_headers = self._headers.meta["__text__"]
         assert len(text_headers) % 3200 == 0, len(text_headers)
-        return [text_headers[i : i + 3200] for i in range(0, len(text_headers), 3200)]
+        return tuple(
+            text_headers[i : i + 3200] for i in range(0, len(text_headers), 3200)
+        )
 
-    @property
+    @cached_property
     def samples(self) -> np.ndarray:
         return self._meta_to_numpy("samples")
 
-    @property
+    @cached_property
     def trace(self) -> Trace:
         return Trace(self._data, self._indexer_cls)
 
-    @property
+    @cached_property
     def header(self) -> Header:
         return Header(self._headers, self._indexer_cls)
 
@@ -67,13 +74,17 @@ class TileSegy:
             tiledb.DenseArray(self._headers.uri, attr=name), self._indexer_cls
         )
 
-    @property
+    @cached_property
     def depth(self) -> Depth:
         return Depth(self._data)
 
     def close(self) -> None:
         self._headers.close()
         self._data.close()
+        # remove all cached properties
+        for attr in list(self.__dict__.keys()):
+            if isinstance(getattr(self.__class__, attr, None), cached_property):
+                delattr(self, attr)
 
     def __enter__(self) -> "TileSegy":
         return self
@@ -98,39 +109,38 @@ class TileSegy:
 class StructuredTileSegy(TileSegy):
     _indexer_cls = StructuredTraceIndexer
 
-    @property
+    @cached_property
     def iline(self) -> Line:
         return Line("ilines", self.ilines, self.offsets, self._data)
 
-    @property
+    @cached_property
     def xline(self) -> Line:
         return Line("xlines", self.xlines, self.offsets, self._data)
 
-    @property
+    @cached_property
     def fast(self) -> Line:
         if self.sorting == TraceSortingFormat.INLINE_SORTING:
             return self.iline
-        if self.sorting == TraceSortingFormat.CROSSLINE_SORTING:
-            return self.xline
-        raise RuntimeError(f"Unknown sorting {self.sorting}")
+        assert self.sorting == TraceSortingFormat.CROSSLINE_SORTING
+        return self.xline
 
-    @property
+    @cached_property
     def gather(self) -> Gather:
         return Gather(self.ilines, self.xlines, self.offsets, self._data)
 
-    @property
+    @cached_property
     def offsets(self) -> np.ndarray:
         return self._meta_to_numpy("offsets", dtype="intc")
 
-    @property
+    @cached_property
     def ilines(self) -> np.ndarray:
         return self._meta_to_numpy("ilines", dtype="intc")
 
-    @property
+    @cached_property
     def xlines(self) -> np.ndarray:
         return self._meta_to_numpy("xlines", dtype="intc")
 
-    @property
+    @cached_property
     def header(self) -> Header:
         header = super().header
         for attr, name in ("iline", "ilines"), ("xline", "xlines"):

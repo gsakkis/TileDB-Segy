@@ -1,6 +1,5 @@
 from functools import singledispatch
 from typing import Any, Iterable, List, Mapping, Union
-from unittest.mock import PropertyMock, patch
 
 import numpy as np
 import pytest
@@ -68,7 +67,7 @@ class TestTileSegy:
 
     @parametrize_tilesegy_segyfiles("t", "s")
     def test_text(self, t: TileSegy, s: SegyFile) -> None:
-        assert t.text == list(s.text)
+        assert t.text == tuple(s.text)
 
     @parametrize_tilesegy_segyfiles("t", "s")
     def test_samples(self, t: TileSegy, s: SegyFile) -> None:
@@ -187,14 +186,6 @@ class TestStructuredTileSegy:
             assert t.fast.name == "ilines"
         else:
             assert t.fast.name == "xlines"
-
-        with patch.object(
-            StructuredTileSegy,
-            "sorting",
-            PropertyMock(return_value=TraceSortingFormat.UNKNOWN_SORTING),
-        ):
-            with pytest.raises(RuntimeError):
-                t.fast
 
     @pytest.mark.parametrize("lines", ["ilines", "xlines"])
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)

@@ -8,17 +8,14 @@ from typing import Any, Iterable, Iterator, Optional, Union, cast
 import numpy as np
 import segyio
 import tiledb
+from cached_property import cached_property
 
 TypedTraceField = namedtuple("TypedTraceField", ["name", "enum", "dtype"])
 
 
-def iter_typed_trace_fields(
-    exclude: Iterable[Union[segyio.TraceField, str]] = ()
-) -> Iterator[TypedTraceField]:
+def iter_typed_trace_fields() -> Iterator[TypedTraceField]:
     all_fields = segyio.TraceField.enums()
     include_names = set(map(str, segyio.field.Field._tr_keys))
-    for f in exclude:
-        include_names.remove(str(f))
     size2dtype = {2: np.dtype(np.int16), 4: np.dtype(np.int32)}
     for f, f2 in zip(all_fields, all_fields[1:]):
         name = str(f)
@@ -39,21 +36,26 @@ TRACE_FIELD_FILTERS = (
 
 
 class ExtendedSegyFile(segyio.SegyFile):
+    @cached_property
+    def trace_size(self) -> int:
+        return len(self._samples) * int(self._dtype.itemsize)
 
-    trace_size = property(lambda self: len(self._samples) * int(self._dtype.itemsize))
-    fast_headerline = property(
-        lambda self: self._header.iline if self.is_inline else self._header.xline
-    )
-    fast_lines = property(lambda self: self._ilines if self.is_inline else self._xlines)
-    slow_lines = property(lambda self: self._xlines if self.is_inline else self._ilines)
+    @cached_property
+    def fast_headerline(self) -> segyio.line.HeaderLine:
+        return self._header.iline if self.is_inline else self._header.xline
 
-    @property
+    @cached_property
+    def fast_lines(self) -> np.ndarray:
+        return self._ilines if self.is_inline else self._xlines
+
+    @cached_property
+    def slow_lines(self) -> np.ndarray:
+        return self._xlines if self.is_inline else self._ilines
+
+    @cached_property
     def is_inline(self) -> bool:
-        if self.sorting == segyio.TraceSortingFormat.INLINE_SORTING:
-            return True
-        if self.sorting == segyio.TraceSortingFormat.CROSSLINE_SORTING:
-            return False
-        raise RuntimeError("Unknown sorting.")
+        assert not self.unstructured
+        return bool(self.sorting == segyio.TraceSortingFormat.INLINE_SORTING)
 
 
 class SegyFileConverter(ABC):
@@ -87,46 +89,39 @@ class SegyFileConverter(ABC):
 
         headers_uri = uri / "headers"
         if tiledb.object_type(str(headers_uri)) != "array":
-            with self._tiledb_array(str(headers_uri), self.header_schema) as tdb:
+            dims = self._get_dims(TRACE_FIELDS_SIZE)
+            header_schema = tiledb.ArraySchema(
+                domain=tiledb.Domain(*dims),
+                attrs=[
+                    tiledb.Attr(f.name, f.dtype, filters=TRACE_FIELD_FILTERS)
+                    for f in TRACE_FIELDS
+                ],
+            )
+            with self._tiledb_array(str(headers_uri), header_schema) as tdb:
                 self._fill_headers(tdb)
 
         data_uri = uri / "data"
         if tiledb.object_type(str(data_uri)) != "array":
-            with self._tiledb_array(str(data_uri), self.data_schema) as tdb:
-                self._fill_data(tdb)
-
-    @property
-    def header_schema(self) -> tiledb.ArraySchema:
-        dims = self._get_dims(TRACE_FIELDS_SIZE)
-        return tiledb.ArraySchema(
-            domain=tiledb.Domain(*dims),
-            attrs=[
-                tiledb.Attr(f.name, f.dtype, filters=TRACE_FIELD_FILTERS)
-                for f in TRACE_FIELDS
-            ],
-        )
-
-    @property
-    def data_schema(self) -> tiledb.ArraySchema:
-        sample_size = self.segy_file.dtype.itemsize
-        samples = len(self.segy_file.samples)
-        dims = list(self._get_dims(sample_size * samples))
-        dims.append(
-            tiledb.Dim(
-                name="samples",
-                domain=(0, samples - 1),
-                dtype=dims[0].dtype,
-                tile=np.clip(self.tile_size // sample_size, 1, samples),
-            )
-        )
-        return tiledb.ArraySchema(
-            domain=tiledb.Domain(*dims),
-            attrs=[
-                tiledb.Attr(
-                    "trace", self.segy_file.dtype, filters=(tiledb.LZ4Filter(),)
+            samples = len(self.segy_file.samples)
+            sample_dtype = self.segy_file.dtype
+            sample_size = sample_dtype.itemsize
+            dims = list(self._get_dims(sample_size * samples))
+            dims.append(
+                tiledb.Dim(
+                    name="samples",
+                    domain=(0, samples - 1),
+                    dtype=dims[0].dtype,
+                    tile=np.clip(self.tile_size // sample_size, 1, samples),
                 )
-            ],
-        )
+            )
+            data_schema = tiledb.ArraySchema(
+                domain=tiledb.Domain(*dims),
+                attrs=[
+                    tiledb.Attr("trace", sample_dtype, filters=(tiledb.LZ4Filter(),))
+                ],
+            )
+            with self._tiledb_array(str(data_uri), data_schema) as tdb:
+                self._fill_data(tdb)
 
     @contextmanager
     def _tiledb_array(
@@ -140,7 +135,7 @@ class SegyFileConverter(ABC):
 
     @abstractmethod
     def _get_dims(self, trace_size: int) -> Iterable[tiledb.Dim]:
-        ...
+        """Get the tiledb schema dimensions"""
 
     @abstractmethod
     def _fill_headers(self, tdb: tiledb.Array) -> None:
