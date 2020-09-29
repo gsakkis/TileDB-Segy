@@ -1,6 +1,7 @@
 .idea
 *.pyc
 .coverage
+.eggs/
 build/
 dist/
 tilesegy.egg-info/

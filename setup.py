@@ -9,7 +9,8 @@ setup(
     author_email="george.sakkis@gmail.com",
     packages=["tilesegy"],
     install_requires=["segyio", "tiledb"],
-    extras_require={"testing": ["pytest", "pytest-coverage", "pytest-xdist"]},
+    setup_requires=["pytest-runner"],
+    tests_require=["pytest", "pytest-coverage", "pytest-xdist", "filelock"],
     entry_points={"console_scripts": ["segy2tiledb=tilesegy.cli:main"]},
     license="MIT",
     classifiers=[
