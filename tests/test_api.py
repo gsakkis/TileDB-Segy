@@ -187,6 +187,13 @@ class TestStructuredTileSegy:
         else:
             assert t.fast.name == "xlines"
 
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    def test_slow(self, t: StructuredTileSegy, s: SegyFile) -> None:
+        if s.sorting == TraceSortingFormat.INLINE_SORTING:
+            assert t.slow.name == "xlines"
+        else:
+            assert t.slow.name == "ilines"
+
     @pytest.mark.parametrize("lines", ["ilines", "xlines"])
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
     def test_lines(self, lines: str, t: StructuredTileSegy, s: SegyFile) -> None:

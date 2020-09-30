@@ -125,6 +125,13 @@ class StructuredTileSegy(TileSegy):
         return self.xline
 
     @cached_property
+    def slow(self) -> Line:
+        if self.sorting == TraceSortingFormat.INLINE_SORTING:
+            return self.xline
+        assert self.sorting == TraceSortingFormat.CROSSLINE_SORTING
+        return self.iline
+
+    @cached_property
     def gather(self) -> Gather:
         return Gather(self.ilines, self.xlines, self.offsets, self._data)
 
