@@ -163,16 +163,16 @@ class TestTileSegy:
             t_attrs[i, 0]
 
     @parametrize_tilesegy_segyfiles("t", "s")
-    def test_depth(self, t: StructuredTileSegy, s: SegyFile) -> None:
-        assert len(t.depth) == len(s.depth_slice)
+    def test_depth_slice(self, t: StructuredTileSegy, s: SegyFile) -> None:
+        assert len(t.depth_slice) == len(s.depth_slice)
 
         i = np.random.randint(0, len(s.samples) // 2)
         j = np.random.randint(i + 1, len(s.samples))
         # one depth
-        assert_equal_arrays(t.depth[i], s.depth_slice[i])
+        assert_equal_arrays(t.depth_slice[i], s.depth_slice[i])
         # slice depths
         for sl in iter_slices(i, j):
-            assert_equal_arrays(t.depth[sl], as_array(s.depth_slice[sl]))
+            assert_equal_arrays(t.depth_slice[sl], as_array(s.depth_slice[sl]))
 
 
 class TestStructuredTileSegy:
@@ -299,8 +299,8 @@ class TestStructuredTileSegy:
                 assert t_line_sliced == s_line_sliced
 
     @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_depth(self, t: StructuredTileSegy, s: SegyFile) -> None:
-        # segyio doesn't currently support offset indexing for depth
+    def test_depth_slice(self, t: StructuredTileSegy, s: SegyFile) -> None:
+        # segyio doesn't currently support offset indexing for depth_slice
         # https://github.com/equinor/segyio/issues/474
         i = np.random.randint(0, len(s.samples) // 2)
         j = np.random.randint(i + 1, len(s.samples))
@@ -308,20 +308,20 @@ class TestStructuredTileSegy:
 
         # one line, x offset
         with pytest.raises(IndexError):
-            t.depth[i, x]
+            t.depth_slice[i, x]
         with pytest.raises(TypeError):
             s.depth_slice[i, x]
 
         for sl in iter_slices(i, j):
             # slice lines, x offset
             with pytest.raises(IndexError):
-                t.depth[sl, x]
+                t.depth_slice[sl, x]
             with pytest.raises(TypeError):
                 s.depth_slice[sl, x]
 
     @parametrize_tilesegy_segyfiles("t", "s", structured=True, multiple_offsets=True)
-    def test_depth_multiple_offsets(self, t: StructuredTileSegy, s: SegyFile) -> None:
-        # segyio doesn't currently support offset indexing for depth
+    def test_depth_slice_many_offsets(self, t: StructuredTileSegy, s: SegyFile) -> None:
+        # segyio doesn't currently support offset indexing for depth_slice
         # https://github.com/equinor/segyio/issues/474
         i = np.random.randint(0, len(s.samples) // 2)
         j = np.random.randint(i + 1, len(s.samples))
@@ -329,14 +329,14 @@ class TestStructuredTileSegy:
         for sl2 in iter_slices(s.offsets[1], s.offsets[3]):
             # one depth, slice offsets
             with pytest.raises(IndexError):
-                t.depth[i, sl2]
+                t.depth_slice[i, sl2]
             with pytest.raises(TypeError):
                 s.depth_slice[i, sl2]
 
             for sl1 in iter_slices(i, j):
                 # slice depths, slice offsets
                 with pytest.raises(IndexError):
-                    t.depth[sl1, sl2]
+                    t.depth_slice[sl1, sl2]
                 with pytest.raises(TypeError):
                     s.depth_slice[sl1, sl2]
 

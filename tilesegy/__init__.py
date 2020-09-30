@@ -75,7 +75,7 @@ class TileSegy:
         )
 
     @cached_property
-    def depth(self) -> Depth:
+    def depth_slice(self) -> Depth:
         return Depth(self._data)
 
     def close(self) -> None:
