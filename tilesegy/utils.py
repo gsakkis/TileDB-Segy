@@ -31,7 +31,7 @@ class TraceIndexer:
 
     def __getitem__(
         self, trace_index: Index
-    ) -> Tuple[Tuple[Index, ...], Union[List[int], ellipsis]]:
+    ) -> Tuple[Tuple[Index, ...], Union[int, List[int], ellipsis]]:
         """
         Given a trace index, return a `(bounding_box, post_reshape_indices)` tuple where:
         - `bounding_box` is a tuple of (int or slice) indices for each dimension in shape that
