@@ -30,7 +30,7 @@ Tilesegy can be installed
 
       pip install tilesegy
 
-- from source by cloning the [Git](https://github.com/gsakkis/tilesgy) repository:
+- from source by cloning the [Git](https://github.com/gsakkis/tilesegy) repository:
 
       git clone https://github.com/gsakkis/tilesegy.git
       cd tilesegy
@@ -49,7 +49,7 @@ an input file and generates a tilesegy directory at the same parent directory wi
 input and extension `.tsgy`:
 
     $ segy2tiledb a123.segy
-    $ du -sh  a123.*
+    $ du -sh a123.*
     73M a123.sgy
     55M a123.tsgy
 
@@ -99,12 +99,11 @@ Tilesegy generally follows the segyio API so you may consult its excellent
 [documentation](https://segyio.readthedocs.io/en/latest/index.html) to learn about
 the public attributes (`ilines`, `xlines`, `offsets`, `samples`) and addressing modes
 (`trace`, `header`, `attributes`', `iline`, `xline`, `fast`, `slow`, `depth_slice`,
-`gather`,  `text`, `bin`). You can find usage examples of tilesegy in the included
-[Jupyter notebook](https://github.com/gsakkis/tilesegy/blob/master/examples.ipynb).
+`gather`,  `text`, `bin`).
 
-The following section outlines the main differences from segyio.
+You can find usage examples in the included [Jupyter notebook](https://github.com/gsakkis/tilesegy/blob/master/tutorial.ipynb).
 
-### Differences from segyio ###
+The following list outlines the main differences from segyio:
 
 - Probably the biggest difference is that addressing modes that return a generator of
   numpy arrays in segyio, in tilesegy return a single numpy array of higher dimension(s).
