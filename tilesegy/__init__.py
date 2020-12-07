@@ -95,7 +95,7 @@ class TileSegy:
         self.close()
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({str(self._uri)!r})"
+        return f"{self.__class__.__name__}('{self._uri}')"
 
     def _meta_to_numpy(
         self, meta_key: str, dtype: Union[np.dtype, str, None] = None

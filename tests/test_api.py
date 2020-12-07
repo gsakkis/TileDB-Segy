@@ -91,9 +91,9 @@ class TestTileSegy:
     @parametrize_tilesegy_segyfiles("t", "s")
     def test_repr(self, t: TileSegy, s: SegyFile) -> None:
         if s.unstructured:
-            assert repr(t) == f"TileSegy('{str(t.uri)}')"
+            assert repr(t) == f"TileSegy('{t.uri}')"
         else:
-            assert repr(t) == f"StructuredTileSegy('{str(t.uri)}')"
+            assert repr(t) == f"StructuredTileSegy('{t.uri}')"
 
     @parametrize_tilesegy_segyfiles("t", "s")
     def test_trace(self, t: TileSegy, s: SegyFile) -> None:
