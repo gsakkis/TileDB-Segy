@@ -61,7 +61,7 @@ def iter_tsgy_sgy_files(
         sgy_path = FIXTURES_DIR / (basename + ".sgy")
         tsgy_path = FIXTURES_DIR / (basename + ".tsgy")
 
-        with FileLock(FIXTURES_DIR / (basename + ".lock")):
+        with FileLock(str(FIXTURES_DIR / (basename + ".lock"))):
             if not sgy_path.exists():
                 generate_segy(sgy_path, **kwargs)
             if not tsgy_path.exists():
