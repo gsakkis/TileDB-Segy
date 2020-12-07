@@ -1,3 +1,4 @@
+from collections import abc
 from functools import singledispatch
 from typing import Any, Iterable, List, Mapping, Union
 
@@ -42,12 +43,12 @@ def stringify_keys(o: object) -> Any:
     raise TypeError(f"Cannot stringify_keys for {o.__class__}")
 
 
-@stringify_keys.register(Mapping)
+@stringify_keys.register(abc.Mapping)
 def _stringify_keys_mapping(d: Mapping[int, int]) -> Mapping[str, int]:
     return {str(k): v for k, v in d.items()}
 
 
-@stringify_keys.register(Iterable)
+@stringify_keys.register(abc.Iterable)
 def _stringify_keys_iter(s: Iterable[Mapping[int, int]]) -> List[Mapping[str, int]]:
     return list(map(stringify_keys, s))
 
