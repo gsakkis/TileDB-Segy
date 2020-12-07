@@ -145,7 +145,7 @@ class HeaderLine(Line):
             labels, offsets = i, self._default_offset
         header_dicts = self._tdb[self._get_tdb_indices(labels, offsets)]
         header_keys = header_dicts.keys()
-        data = np.stack(header_dicts.values())
+        data = np.stack(list(header_dicts.values()))
         data = np.moveaxis(data, 0, -1)
         data = self._moveaxis(data, labels, offsets)
         data = np.apply_along_axis(lambda v: dict(zip(header_keys, v)), -1, data)
