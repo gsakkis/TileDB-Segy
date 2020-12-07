@@ -24,16 +24,15 @@ class Trace(TraceIndexable):
 
     def __getitem__(self, i: Union[Index, Tuple[Index, Index]]) -> np.ndarray:
         if isinstance(i, tuple):
-            # for single sample segyio returns an array of size 1 instead of scalar
-            trace_index, samples = i[0], ensure_slice(i[1])
+            trace_index, samples = i
         else:
             trace_index, samples = i, slice(None)
 
         bounding_box, post_reshape_indices = self._indexer[trace_index]
-        traces = self._tdb[(*bounding_box, samples)]
+        traces = self._tdb[(*bounding_box, ensure_slice(samples))]
         if traces.ndim > 2:
             traces = traces.reshape(np.array(traces.shape[:-1]).prod(), -1)
-        elif traces.size == 1:
+        elif traces.size == 1 and not isinstance(samples, slice):
             # convert to scalar (https://github.com/equinor/segyio/issues/475)
             post_reshape_indices = 0
         return traces[post_reshape_indices]
