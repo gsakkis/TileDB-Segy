@@ -71,9 +71,7 @@ class TileSegy:
         return Header(self._headers, self._indexer_cls)
 
     def attributes(self, name: str) -> Attributes:
-        return Attributes(
-            tiledb.DenseArray(self._headers.uri, attr=name), self._indexer_cls
-        )
+        return Attributes(tiledb.open(self._headers.uri, attr=name), self._indexer_cls)
 
     @cached_property
     def depth_slice(self) -> Depth:
@@ -159,8 +157,8 @@ class StructuredTileSegy(TileSegy):
 
 def open(uri: Union[str, PurePath]) -> TileSegy:
     uri = URL(uri) if not isinstance(uri, PurePath) else uri
-    headers = tiledb.DenseArray(str(uri / "headers"))
-    data = tiledb.DenseArray(str(uri / "data"), attr="trace")
+    headers = tiledb.open(str(uri / "headers"))
+    data = tiledb.open(str(uri / "data"), attr="trace")
     if data.schema.domain.has_dim("traces"):
         cls = TileSegy
     else:

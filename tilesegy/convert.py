@@ -93,6 +93,7 @@ class SegyFileConverter(ABC):
             dims = self._get_dims(TRACE_FIELDS_SIZE)
             header_schema = tiledb.ArraySchema(
                 domain=tiledb.Domain(*dims),
+                sparse=False,
                 attrs=[
                     tiledb.Attr(f.name, f.dtype, filters=TRACE_FIELD_FILTERS)
                     for f in TRACE_FIELDS
@@ -117,6 +118,7 @@ class SegyFileConverter(ABC):
             )
             data_schema = tiledb.ArraySchema(
                 domain=tiledb.Domain(*dims),
+                sparse=False,
                 attrs=[
                     tiledb.Attr("trace", sample_dtype, filters=(tiledb.LZ4Filter(),))
                 ],
@@ -128,8 +130,8 @@ class SegyFileConverter(ABC):
     def _tiledb_array(
         self, uri: str, schema: tiledb.ArraySchema
     ) -> Iterator[tiledb.Array]:
-        tiledb.DenseArray.create(uri, schema)
-        with tiledb.DenseArray(uri, mode="w") as tdb:
+        tiledb.Array.create(uri, schema)
+        with tiledb.open(uri, mode="w") as tdb:
             yield tdb
         tiledb.consolidate(uri, config=self.config)
         tiledb.vacuum(uri, config=self.config)
