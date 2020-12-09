@@ -2,13 +2,14 @@ import copy
 from abc import ABC, abstractmethod
 from collections import namedtuple
 from contextlib import contextmanager
-from pathlib import Path
+from pathlib import PurePath
 from typing import Any, Iterable, Iterator, Optional, Union, cast
 
 import numpy as np
 import segyio
 import tiledb
 from cached_property import cached_property
+from urlpath import URL
 
 TypedTraceField = namedtuple("TypedTraceField", ["name", "enum", "dtype"])
 
@@ -81,14 +82,14 @@ class SegyFileConverter(ABC):
         self.tile_size = tile_size
         self.config = config
 
-    def to_tiledb(self, uri: Union[str, Path]) -> None:
-        uri = Path(uri) if not isinstance(uri, Path) else uri
+    def to_tiledb(self, uri: Union[str, PurePath]) -> None:
+        uri = URL(uri) if not isinstance(uri, PurePath) else uri
 
         if tiledb.object_type(str(uri)) != "group":
             tiledb.group_create(str(uri))
 
-        headers_uri = uri / "headers"
-        if tiledb.object_type(str(headers_uri)) != "array":
+        headers_uri = str(uri / "headers")
+        if tiledb.object_type(headers_uri) != "array":
             dims = self._get_dims(TRACE_FIELDS_SIZE)
             header_schema = tiledb.ArraySchema(
                 domain=tiledb.Domain(*dims),
@@ -97,11 +98,11 @@ class SegyFileConverter(ABC):
                     for f in TRACE_FIELDS
                 ],
             )
-            with self._tiledb_array(str(headers_uri), header_schema) as tdb:
+            with self._tiledb_array(headers_uri, header_schema) as tdb:
                 self._fill_headers(tdb)
 
-        data_uri = uri / "data"
-        if tiledb.object_type(str(data_uri)) != "array":
+        data_uri = str(uri / "data")
+        if tiledb.object_type(data_uri) != "array":
             samples = len(self.segy_file.samples)
             sample_dtype = self.segy_file.dtype
             sample_size = sample_dtype.itemsize
@@ -120,7 +121,7 @@ class SegyFileConverter(ABC):
                     tiledb.Attr("trace", sample_dtype, filters=(tiledb.LZ4Filter(),))
                 ],
             )
-            with self._tiledb_array(str(data_uri), data_schema) as tdb:
+            with self._tiledb_array(data_uri, data_schema) as tdb:
                 self._fill_data(tdb)
 
     @contextmanager

@@ -79,5 +79,5 @@ def parametrize_tilesegy_segyfiles(
     return pytest.mark.parametrize(
         (tilesegy_name, segyfile_name),
         iter_tsgy_sgy_files(structured, multiple_offsets),
-        ids=lambda x: Path(x.uri).stem if isinstance(x, TileSegy) else None,
+        ids=lambda x: x.uri.stem if isinstance(x, TileSegy) else None,
     )

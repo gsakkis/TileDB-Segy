@@ -1,12 +1,13 @@
 __all__ = ["open", "TileSegy", "StructuredTileSegy"]
 
-from pathlib import Path
+from pathlib import PurePath
 from types import TracebackType
 from typing import TYPE_CHECKING, Optional, Tuple, Type, Union
 
 import numpy as np
 import tiledb
 from segyio import TraceSortingFormat
+from urlpath import URL
 
 if TYPE_CHECKING:  # pragma: nocover
     cached_property = property
@@ -29,13 +30,13 @@ from .utils import StructuredTraceIndexer, TraceIndexer
 class TileSegy:
     _indexer_cls: Type[TraceIndexer] = TraceIndexer
 
-    def __init__(self, uri: Path, headers: tiledb.Array, data: tiledb.Array):
+    def __init__(self, uri: PurePath, headers: tiledb.Array, data: tiledb.Array):
         self._uri = uri
         self._headers = headers
         self._data = data
 
     @property
-    def uri(self) -> Path:
+    def uri(self) -> PurePath:
         return self._uri
 
     @cached_property
@@ -156,8 +157,8 @@ class StructuredTileSegy(TileSegy):
         return header
 
 
-def open(uri: Union[str, Path]) -> TileSegy:
-    uri = Path(uri) if not isinstance(uri, Path) else uri
+def open(uri: Union[str, PurePath]) -> TileSegy:
+    uri = URL(uri) if not isinstance(uri, PurePath) else uri
     headers = tiledb.DenseArray(str(uri / "headers"))
     data = tiledb.DenseArray(str(uri / "data"), attr="trace")
     if data.schema.domain.has_dim("traces"):
