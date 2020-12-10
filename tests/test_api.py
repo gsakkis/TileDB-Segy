@@ -378,6 +378,10 @@ class TestStructuredTileSegy:
             for sl2 in x_slices:
                 self._assert_equal_gather(t, s, sl1, sl2)
 
+    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    def test_cube(self, t: StructuredTileSegy, s: SegyFile) -> None:
+        assert_equal_arrays(t.cube(), segyio.tools.cube(s))
+
     def _assert_equal_gather(
         self, t: StructuredTileSegy, s: SegyFile, i: Index, x: Index
     ) -> None:

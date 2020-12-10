@@ -160,6 +160,17 @@ class StructuredTileSegy(TileSegy):
             setattr(header, attr, line)
         return header
 
+    def cube(self) -> np.ndarray:
+        if self.sorting == TraceSortingFormat.INLINE_SORTING:
+            fast, slow = self.ilines, self.xlines
+        else:
+            fast, slow = self.xlines, self.ilines
+        dims = list(map(len, (fast, slow, self.samples)))
+        offsets = len(self.offsets)
+        if offsets > 1:
+            dims.insert(2, offsets)
+        return self.trace[:].reshape(dims)
+
 
 URI = Union[str, PurePath]
 
