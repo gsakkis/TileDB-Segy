@@ -7,8 +7,8 @@ import segyio
 from filelock import FileLock
 from segyio import SegyFile, TraceSortingFormat
 
-import tilesegy
-from tilesegy import TileSegy, cli
+import tiledb.segy
+from tiledb.segy import TileSegy, cli
 
 from .segyio_utils import generate_structured_segy, generate_unstructured_segy
 
@@ -67,7 +67,7 @@ def iter_tsgy_sgy_files(
             if not tsgy_path.exists():
                 cli.main(list(map(str, [sgy_path, tsgy_path])))
 
-        yield tilesegy.open(tsgy_path), segyio.open(sgy_path, strict=False)
+        yield tiledb.segy.open(tsgy_path), segyio.open(sgy_path, strict=False)
 
 
 def parametrize_tilesegy_segyfiles(

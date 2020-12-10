@@ -8,10 +8,10 @@ import segyio.tools
 from segyio import SegyFile, TraceField, TraceSortingFormat
 from tiledb.libtiledb import TileDBError
 
-import tilesegy
+import tiledb.segy
 from tests.conftest import parametrize_tilesegy_segyfiles
-from tilesegy import StructuredTileSegy, TileSegy
-from tilesegy.utils import Index
+from tiledb.segy import StructuredTileSegy, TileSegy
+from tiledb.segy.utils import Index
 
 
 def assert_equal_arrays(
@@ -84,7 +84,7 @@ class TestTileSegy:
 
     @parametrize_tilesegy_segyfiles("t", "s")
     def test_context_manager(self, t: TileSegy, s: SegyFile) -> None:
-        with tilesegy.open(t.uri) as t2:
+        with tiledb.segy.open(t.uri) as t2:
             t2.bin
         with pytest.raises(TileDBError):
             t2.bin

@@ -1,6 +1,7 @@
 from typing import Dict, List, Tuple, Type, Union, cast
 
 import numpy as np
+
 import tiledb
 
 from .singledispatchmethod import singledispatchmethod  # type: ignore

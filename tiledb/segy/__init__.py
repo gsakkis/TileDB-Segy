@@ -6,9 +6,10 @@ from types import TracebackType
 from typing import TYPE_CHECKING, Optional, Tuple, Type, Union
 
 import numpy as np
-import tiledb
 import urlpath
 from segyio import TraceSortingFormat
+
+import tiledb
 
 if TYPE_CHECKING:  # pragma: nocover
     cached_property = property

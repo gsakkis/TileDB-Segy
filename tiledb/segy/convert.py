@@ -8,9 +8,10 @@ from typing import Any, Iterable, Iterator, Optional, Union, cast
 import numpy as np
 import segyio
 import segyio.tools
-import tiledb
 from cached_property import cached_property
 from urlpath import URL
+
+import tiledb
 
 TypedTraceField = namedtuple("TypedTraceField", ["name", "enum", "dtype"])
 

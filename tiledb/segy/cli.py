@@ -1,4 +1,4 @@
-"""Convert a segy file to tilesegy format"""
+"""Convert a SEG-Y file to tiledb-segy format"""
 
 import shutil
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, RawTextHelpFormatter
@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import segyio
+
 import tiledb
 
 from .convert import SegyFileConverter
@@ -17,10 +18,8 @@ class HelpFormatter(RawTextHelpFormatter, ArgumentDefaultsHelpFormatter):
 
 def get_parser() -> ArgumentParser:
     parser = ArgumentParser(formatter_class=HelpFormatter, description=__doc__)
-    parser.add_argument("input", type=Path, help="Input segy file path")
-    parser.add_argument(
-        "output", type=Path, nargs="?", help="Output tilesegy directory path"
-    )
+    parser.add_argument("input", type=Path, help="Input SEG-Y file path")
+    parser.add_argument("output", type=Path, nargs="?", help="Output directory path")
     parser.add_argument(
         "-o",
         "--overwrite",
@@ -32,8 +31,8 @@ def get_parser() -> ArgumentParser:
         "--geometry",
         choices=["auto", "structured", "unstructured"],
         default="auto",
-        help="""Geometry of the converted tilesegy:
-- auto: same as the input segy.
+        help="""Output geometry:
+- auto: same as the input SEG-Y.
 - structured: same as `auto` but abort if a geometry cannot be inferred.
 - unstructured: opt out on building geometry information.
 """,

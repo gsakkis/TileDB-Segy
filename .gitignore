@@ -3,7 +3,7 @@
 .coverage
 coverage/
 .eggs/
+*.egg-info/
 build/
 dist/
-tilesegy.egg-info/
 tests/fixtures/

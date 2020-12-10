@@ -54,17 +54,17 @@ jobs:
         run: python -c "import sys; print(sys.version)"
       - name: Upgrade pip
         run: python -m pip install --upgrade pip
-      - name: Install numpy < 1.20
+      - name: Install Numpy < 1.20
         if: ${{ matrix.python-version < '3.7' }}
         run: pip install 'numpy<1.20'
       - name: Checkout
         uses: actions/checkout@v2
-      - name: Install tilesegy
+      - name: Install TileDB-Segy
         run: python setup.py install
-      - name: Test tilesegy (with coverage)
+      - name: Test with coverage
         run: |
           python setup.py test --addopts "
-            --cov=tilesegy
+            --cov=tiledb
             --cov-report=term-missing
             --cov-report=html:coverage
             --cov-report=xml:coverage/coverage.xml
