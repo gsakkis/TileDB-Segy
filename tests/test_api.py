@@ -4,6 +4,7 @@ from typing import Any, Iterable, List, Mapping, Union
 
 import numpy as np
 import pytest
+import segyio.tools
 from segyio import SegyFile, TraceField, TraceSortingFormat
 from tiledb.libtiledb import TileDBError
 
@@ -164,7 +165,7 @@ class TestTileSegy:
             t_attrs[i, 0]
 
     @parametrize_tilesegy_segyfiles("t", "s")
-    def test_depth_slice(self, t: StructuredTileSegy, s: SegyFile) -> None:
+    def test_depth_slice(self, t: TileSegy, s: SegyFile) -> None:
         assert len(t.depth_slice) == len(s.depth_slice)
 
         i = np.random.randint(0, len(s.samples) // 2)
@@ -174,6 +175,11 @@ class TestTileSegy:
         # slice depths
         for sl in iter_slices(i, j):
             assert_equal_arrays(t.depth_slice[sl], as_array(s.depth_slice[sl]))
+
+    @parametrize_tilesegy_segyfiles("t", "s")
+    def test_dt(self, t: TileSegy, s: SegyFile) -> None:
+        assert t.dt() == segyio.tools.dt(s)
+        assert t.dt(fallback=1234) == segyio.tools.dt(s, fallback_dt=1234)
 
 
 class TestStructuredTileSegy:

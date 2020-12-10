@@ -7,6 +7,7 @@ from typing import Any, Iterable, Iterator, Optional, Union, cast
 
 import numpy as np
 import segyio
+import segyio.tools
 import tiledb
 from cached_property import cached_property
 from urlpath import URL
@@ -152,6 +153,7 @@ class SegyFileConverter(ABC):
             self.segy_file.sorting or segyio.TraceSortingFormat.UNKNOWN_SORTING
         )
         tdb.meta["samples"] = self.segy_file.samples.tolist()
+        tdb.meta["dt"] = segyio.tools.dt(self.segy_file, fallback_dt=0)
 
 
 class UnstructuredSegyFileConverter(SegyFileConverter):

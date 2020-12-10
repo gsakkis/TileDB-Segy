@@ -80,6 +80,9 @@ class TileSegy:
     def depth_slice(self) -> Depth:
         return Depth(self._data)
 
+    def dt(self, fallback: float = 4000.0) -> float:
+        return self._data.meta["dt"] or fallback
+
     def close(self) -> None:
         self._headers.close()
         self._data.close()
