@@ -64,12 +64,13 @@ jobs:
         run: python setup.py install
       - name: Test tilesegy (with coverage)
         run: |
-          python setup.py test --addopts '
+          python setup.py test --addopts "
             --cov=tilesegy
             --cov-report=term-missing
             --cov-report=html:coverage
             --cov-report=xml:coverage/coverage.xml
-          '
+            -W 'ignore:PY_SSIZE_T_CLEAN will be required:DeprecationWarning'
+          "
       - name: Archive code coverage results
         uses: actions/upload-artifact@v2
         with:
