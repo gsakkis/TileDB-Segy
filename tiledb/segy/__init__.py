@@ -1,4 +1,4 @@
-__all__ = ["open", "TileSegy", "StructuredTileSegy"]
+__all__ = ["open", "Segy", "StructuredSegy"]
 
 import os
 from pathlib import PurePath
@@ -29,7 +29,7 @@ from .indexables import (
 from .utils import StructuredTraceIndexer, TraceIndexer
 
 
-class TileSegy:
+class Segy:
     _indexer_cls: Type[TraceIndexer] = TraceIndexer
 
     def __init__(
@@ -92,7 +92,7 @@ class TileSegy:
             if isinstance(getattr(self.__class__, attr, None), cached_property):
                 delattr(self, attr)
 
-    def __enter__(self) -> "TileSegy":
+    def __enter__(self) -> "Segy":
         return self
 
     def __exit__(
@@ -112,7 +112,7 @@ class TileSegy:
         return np.array(values, dtype)
 
 
-class StructuredTileSegy(TileSegy):
+class StructuredSegy(Segy):
     _indexer_cls = StructuredTraceIndexer
 
     @cached_property
@@ -176,18 +176,18 @@ class StructuredTileSegy(TileSegy):
 URI = Union[str, PurePath]
 
 
-def open(uri: URI) -> TileSegy:
+def open(uri: URI) -> Segy:
     uri = urlpath.URL(uri) if not isinstance(uri, PurePath) else uri
     ts = open2(data_uri=uri / "data", headers_uri=uri / "headers")
     ts._uri = uri
     return ts
 
 
-def open2(data_uri: URI, headers_uri: URI) -> TileSegy:
+def open2(data_uri: URI, headers_uri: URI) -> Segy:
     data = tiledb.open(str(data_uri), attr="trace")
     headers = tiledb.open(str(headers_uri))
     if data.schema.domain.has_dim("traces"):
-        cls = TileSegy
+        cls = Segy
     else:
-        cls = StructuredTileSegy
+        cls = StructuredSegy
     return cls(data, headers)

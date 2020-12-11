@@ -9,8 +9,8 @@ from segyio import SegyFile, TraceField, TraceSortingFormat
 from tiledb.libtiledb import TileDBError
 
 import tiledb.segy
-from tests.conftest import parametrize_tilesegy_segyfiles
-from tiledb.segy import StructuredTileSegy, TileSegy
+from tests.conftest import parametrize_segys
+from tiledb.segy import Segy, StructuredSegy
 from tiledb.segy.utils import Index
 
 
@@ -58,46 +58,46 @@ def iter_slices(i: int, j: int) -> Iterable[slice]:
     return slice(None, None), slice(None, j), slice(i, None), slice(i, j)
 
 
-class TestTileSegy:
-    @parametrize_tilesegy_segyfiles("t", "s")
-    def test_sorting(self, t: TileSegy, s: SegyFile) -> None:
+class TestSegy:
+    @parametrize_segys("t", "s")
+    def test_sorting(self, t: Segy, s: SegyFile) -> None:
         assert t.sorting == s.sorting
 
-    @parametrize_tilesegy_segyfiles("t", "s")
-    def test_bin(self, t: TileSegy, s: SegyFile) -> None:
+    @parametrize_segys("t", "s")
+    def test_bin(self, t: Segy, s: SegyFile) -> None:
         assert t.bin == stringify_keys(s.bin)
 
-    @parametrize_tilesegy_segyfiles("t", "s")
-    def test_text(self, t: TileSegy, s: SegyFile) -> None:
+    @parametrize_segys("t", "s")
+    def test_text(self, t: Segy, s: SegyFile) -> None:
         assert t.text == tuple(s.text)
 
-    @parametrize_tilesegy_segyfiles("t", "s")
-    def test_samples(self, t: TileSegy, s: SegyFile) -> None:
+    @parametrize_segys("t", "s")
+    def test_samples(self, t: Segy, s: SegyFile) -> None:
         assert_equal_arrays(t.samples, s.samples)
 
-    @parametrize_tilesegy_segyfiles("t", "s")
-    def test_close(self, t: TileSegy, s: SegyFile) -> None:
+    @parametrize_segys("t", "s")
+    def test_close(self, t: Segy, s: SegyFile) -> None:
         t.bin
         t.close()
         with pytest.raises(TileDBError):
             t.bin
 
-    @parametrize_tilesegy_segyfiles("t", "s")
-    def test_context_manager(self, t: TileSegy, s: SegyFile) -> None:
+    @parametrize_segys("t", "s")
+    def test_context_manager(self, t: Segy, s: SegyFile) -> None:
         with tiledb.segy.open(t.uri) as t2:
             t2.bin
         with pytest.raises(TileDBError):
             t2.bin
 
-    @parametrize_tilesegy_segyfiles("t", "s")
-    def test_repr(self, t: TileSegy, s: SegyFile) -> None:
+    @parametrize_segys("t", "s")
+    def test_repr(self, t: Segy, s: SegyFile) -> None:
         if s.unstructured:
-            assert repr(t) == f"TileSegy('{t.uri}')"
+            assert repr(t) == f"Segy('{t.uri}')"
         else:
-            assert repr(t) == f"StructuredTileSegy('{t.uri}')"
+            assert repr(t) == f"StructuredSegy('{t.uri}')"
 
-    @parametrize_tilesegy_segyfiles("t", "s")
-    def test_trace(self, t: TileSegy, s: SegyFile) -> None:
+    @parametrize_segys("t", "s")
+    def test_trace(self, t: Segy, s: SegyFile) -> None:
         assert len(t.trace) == len(s.trace) == s.tracecount
 
         i = np.random.randint(0, s.tracecount // 2)
@@ -130,8 +130,8 @@ class TestTileSegy:
         with pytest.raises((IndexError, TypeError)):
             t.trace[float(i), 0]
 
-    @parametrize_tilesegy_segyfiles("t", "s")
-    def test_header(self, t: TileSegy, s: SegyFile) -> None:
+    @parametrize_segys("t", "s")
+    def test_header(self, t: Segy, s: SegyFile) -> None:
         assert len(t.header) == len(s.header)
 
         i = np.random.randint(0, s.tracecount // 2)
@@ -145,8 +145,8 @@ class TestTileSegy:
         with pytest.raises(TypeError):
             t.header[i, 0]
 
-    @parametrize_tilesegy_segyfiles("t", "s")
-    def test_attributes(self, t: TileSegy, s: SegyFile) -> None:
+    @parametrize_segys("t", "s")
+    def test_attributes(self, t: Segy, s: SegyFile) -> None:
         str_attr = "TraceNumber"
         t_attrs = t.attributes(str_attr)
         s_attrs = s.attributes(getattr(TraceField, str_attr))
@@ -164,8 +164,8 @@ class TestTileSegy:
         with pytest.raises(TypeError):
             t_attrs[i, 0]
 
-    @parametrize_tilesegy_segyfiles("t", "s")
-    def test_depth_slice(self, t: TileSegy, s: SegyFile) -> None:
+    @parametrize_segys("t", "s")
+    def test_depth_slice(self, t: Segy, s: SegyFile) -> None:
         assert len(t.depth_slice) == len(s.depth_slice)
 
         i = np.random.randint(0, len(s.samples) // 2)
@@ -176,43 +176,43 @@ class TestTileSegy:
         for sl in iter_slices(i, j):
             assert_equal_arrays(t.depth_slice[sl], as_array(s.depth_slice[sl]))
 
-    @parametrize_tilesegy_segyfiles("t", "s")
-    def test_dt(self, t: TileSegy, s: SegyFile) -> None:
+    @parametrize_segys("t", "s")
+    def test_dt(self, t: Segy, s: SegyFile) -> None:
         assert t.dt() == segyio.tools.dt(s)
         assert t.dt(fallback=1234) == segyio.tools.dt(s, fallback_dt=1234)
 
 
-class TestStructuredTileSegy:
-    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_offsets(self, t: StructuredTileSegy, s: SegyFile) -> None:
+class TestStructuredSegy:
+    @parametrize_segys("t", "s", structured=True)
+    def test_offsets(self, t: StructuredSegy, s: SegyFile) -> None:
         assert_equal_arrays(t.offsets, s.offsets)
 
-    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_fast(self, t: StructuredTileSegy, s: SegyFile) -> None:
+    @parametrize_segys("t", "s", structured=True)
+    def test_fast(self, t: StructuredSegy, s: SegyFile) -> None:
         if s.sorting == TraceSortingFormat.INLINE_SORTING:
             assert t.fast.name == "ilines"
         else:
             assert t.fast.name == "xlines"
 
-    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_slow(self, t: StructuredTileSegy, s: SegyFile) -> None:
+    @parametrize_segys("t", "s", structured=True)
+    def test_slow(self, t: StructuredSegy, s: SegyFile) -> None:
         if s.sorting == TraceSortingFormat.INLINE_SORTING:
             assert t.slow.name == "xlines"
         else:
             assert t.slow.name == "ilines"
 
     @pytest.mark.parametrize("lines", ["ilines", "xlines"])
-    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_lines(self, lines: str, t: StructuredTileSegy, s: SegyFile) -> None:
+    @parametrize_segys("t", "s", structured=True)
+    def test_lines(self, lines: str, t: StructuredSegy, s: SegyFile) -> None:
         assert_equal_arrays(getattr(t, lines), getattr(s, lines))
 
     @pytest.mark.parametrize("line,lines", [("iline", "ilines"), ("xline", "xlines")])
-    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    @parametrize_segys("t", "s", structured=True)
     def test_line(
         self,
         line: str,
         lines: str,
-        t: StructuredTileSegy,
+        t: StructuredSegy,
         s: SegyFile,
     ) -> None:
         t_line, s_line = getattr(t, line), getattr(s, line)
@@ -233,12 +233,12 @@ class TestStructuredTileSegy:
             assert_equal_arrays(t_line[sl, x], as_array(s_line[sl, x]))
 
     @pytest.mark.parametrize("line,lines", [("iline", "ilines"), ("xline", "xlines")])
-    @parametrize_tilesegy_segyfiles("t", "s", structured=True, multiple_offsets=True)
+    @parametrize_segys("t", "s", structured=True, multiple_offsets=True)
     def test_line_multiple_offsets(
         self,
         line: str,
         lines: str,
-        t: StructuredTileSegy,
+        t: StructuredSegy,
         s: SegyFile,
     ) -> None:
         t_line, s_line = getattr(t, line), getattr(s, line)
@@ -255,12 +255,12 @@ class TestStructuredTileSegy:
                 )
 
     @pytest.mark.parametrize("line,lines", [("iline", "ilines"), ("xline", "xlines")])
-    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
+    @parametrize_segys("t", "s", structured=True)
     def test_header_line(
         self,
         line: str,
         lines: str,
-        t: StructuredTileSegy,
+        t: StructuredSegy,
         s: SegyFile,
     ) -> None:
         t_line, s_line = getattr(t.header, line), getattr(s.header, line)
@@ -282,12 +282,12 @@ class TestStructuredTileSegy:
             assert t_line[sl, x] == stringify_keys(s_line[sl, x])
 
     @pytest.mark.parametrize("line,lines", [("iline", "ilines"), ("xline", "xlines")])
-    @parametrize_tilesegy_segyfiles("t", "s", structured=True, multiple_offsets=True)
+    @parametrize_segys("t", "s", structured=True, multiple_offsets=True)
     def test_header_line_multiple_offsets(
         self,
         line: str,
         lines: str,
-        t: StructuredTileSegy,
+        t: StructuredSegy,
         s: SegyFile,
     ) -> None:
         t_line, s_line = getattr(t.header, line), getattr(s.header, line)
@@ -305,8 +305,8 @@ class TestStructuredTileSegy:
                 s_line_sliced = stringify_keys(s_line[sl1, sl2])
                 assert t_line_sliced == s_line_sliced
 
-    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_depth_slice(self, t: StructuredTileSegy, s: SegyFile) -> None:
+    @parametrize_segys("t", "s", structured=True)
+    def test_depth_slice(self, t: StructuredSegy, s: SegyFile) -> None:
         # segyio doesn't currently support offset indexing for depth_slice
         # https://github.com/equinor/segyio/issues/474
         i = np.random.randint(0, len(s.samples) // 2)
@@ -326,8 +326,8 @@ class TestStructuredTileSegy:
             with pytest.raises(TypeError):
                 s.depth_slice[sl, x]
 
-    @parametrize_tilesegy_segyfiles("t", "s", structured=True, multiple_offsets=True)
-    def test_depth_slice_many_offsets(self, t: StructuredTileSegy, s: SegyFile) -> None:
+    @parametrize_segys("t", "s", structured=True, multiple_offsets=True)
+    def test_depth_slice_many_offsets(self, t: StructuredSegy, s: SegyFile) -> None:
         # segyio doesn't currently support offset indexing for depth_slice
         # https://github.com/equinor/segyio/issues/474
         i = np.random.randint(0, len(s.samples) // 2)
@@ -347,8 +347,8 @@ class TestStructuredTileSegy:
                 with pytest.raises(TypeError):
                     s.depth_slice[sl1, sl2]
 
-    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_gather(self, t: StructuredTileSegy, s: SegyFile) -> None:
+    @parametrize_segys("t", "s", structured=True)
+    def test_gather(self, t: StructuredSegy, s: SegyFile) -> None:
         i = np.random.choice(s.ilines)
         i_slices = [
             slice(None, s.ilines[2]),
@@ -378,12 +378,12 @@ class TestStructuredTileSegy:
             for sl2 in x_slices:
                 self._assert_equal_gather(t, s, sl1, sl2)
 
-    @parametrize_tilesegy_segyfiles("t", "s", structured=True)
-    def test_cube(self, t: StructuredTileSegy, s: SegyFile) -> None:
+    @parametrize_segys("t", "s", structured=True)
+    def test_cube(self, t: StructuredSegy, s: SegyFile) -> None:
         assert_equal_arrays(t.cube(), segyio.tools.cube(s))
 
     def _assert_equal_gather(
-        self, t: StructuredTileSegy, s: SegyFile, i: Index, x: Index
+        self, t: StructuredSegy, s: SegyFile, i: Index, x: Index
     ) -> None:
         o = s.offsets[0]
         # segyio flattens the (ilines, xlines) dimensions into one

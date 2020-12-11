@@ -8,7 +8,7 @@ from filelock import FileLock
 from segyio import SegyFile, TraceSortingFormat
 
 import tiledb.segy
-from tiledb.segy import TileSegy, cli
+from tiledb.segy import Segy, cli
 
 from .segyio_utils import generate_structured_segy, generate_unstructured_segy
 
@@ -34,7 +34,7 @@ STRUCTURED_SEGY_COMBOS = {
 
 def iter_tsgy_sgy_files(
     structured: Optional[bool] = None, multiple_offsets: Optional[bool] = None
-) -> Iterator[Tuple[TileSegy, SegyFile]]:
+) -> Iterator[Tuple[Segy, SegyFile]]:
     if structured is None:
         yield from iter_tsgy_sgy_files(False, multiple_offsets)
         yield from iter_tsgy_sgy_files(True, multiple_offsets)
@@ -70,14 +70,14 @@ def iter_tsgy_sgy_files(
         yield tiledb.segy.open(tsgy_path), segyio.open(sgy_path, strict=False)
 
 
-def parametrize_tilesegy_segyfiles(
-    tilesegy_name: str,
-    segyfile_name: str,
+def parametrize_segys(
+    tiledb_segy_name: str,
+    segyio_file_name: str,
     structured: Optional[bool] = None,
     multiple_offsets: Optional[bool] = None,
 ) -> Any:
     return pytest.mark.parametrize(
-        (tilesegy_name, segyfile_name),
+        (tiledb_segy_name, segyio_file_name),
         iter_tsgy_sgy_files(structured, multiple_offsets),
-        ids=lambda x: x.uri.stem if isinstance(x, TileSegy) else None,
+        ids=lambda x: x.uri.stem if isinstance(x, Segy) else None,
     )
