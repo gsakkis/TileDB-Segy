@@ -26,7 +26,7 @@ def iter_typed_trace_fields() -> Iterator[TypedTraceField]:
 
 
 TRACE_FIELDS = tuple(iter_typed_trace_fields())
-TRACE_FIELD_ENUMS = tuple(f.enum for f in TRACE_FIELDS)
+TRACE_FIELD_ENUMS = tuple(int(f.enum) for f in TRACE_FIELDS)
 TRACE_FIELD_NAMES = tuple(f.name for f in TRACE_FIELDS)
 TRACE_FIELD_DTYPES = tuple(f.dtype for f in TRACE_FIELDS)
 TRACE_FIELDS_SIZE = sum(dtype.itemsize for dtype in TRACE_FIELD_DTYPES)
