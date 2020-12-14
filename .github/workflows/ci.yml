@@ -68,7 +68,6 @@ jobs:
             --cov-report=term-missing
             --cov-report=html:coverage
             --cov-report=xml:coverage/coverage.xml
-            -W 'ignore:PY_SSIZE_T_CLEAN will be required:DeprecationWarning'
           "
       - name: Archive code coverage results
         uses: actions/upload-artifact@v2

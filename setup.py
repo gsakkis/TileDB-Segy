@@ -1,13 +1,9 @@
-import sys
 from pathlib import Path
 
 from setuptools import setup
 
 with Path(__file__).parent.joinpath("README.md").open() as f:
     long_description = f.read()
-
-
-SEGYIO_VERSION = ">=1.9.3" if sys.platform != "darwin" else "==1.9.3"
 
 setup(
     name="tilesegy",
@@ -19,12 +15,7 @@ setup(
     author="George Sakkis",
     author_email="george.sakkis@gmail.com",
     packages=["tilesegy"],
-    install_requires=[
-        "cached_property",
-        "segyio" + SEGYIO_VERSION,
-        "tiledb",
-        "urlpath",
-    ],
+    install_requires=["cached_property", "segyio>=1.9.5", "tiledb", "urlpath"],
     setup_requires=["pytest-runner"],
     tests_require=["pytest", "pytest-coverage", "pytest-xdist", "filelock"],
     entry_points={"console_scripts": ["segy2tiledb=tilesegy.cli:main"]},
