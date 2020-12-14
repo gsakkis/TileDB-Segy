@@ -33,11 +33,16 @@ class Segy:
     _indexer_cls: Type[TraceIndexer] = TraceIndexer
 
     def __init__(
-        self, data: tiledb.Array, headers: tiledb.Array, uri: Optional[PurePath] = None
+        self,
+        data: tiledb.Array,
+        headers: tiledb.Array,
+        uri: Optional[PurePath] = None,
+        ctx: Optional[tiledb.Ctx] = None,
     ):
         self._data = data
         self._headers = headers
         self._uri = uri or PurePath(os.devnull)
+        self._ctx = ctx
 
     @property
     def uri(self) -> PurePath:
@@ -75,7 +80,9 @@ class Segy:
         return Header(self._headers, self._indexer_cls)
 
     def attributes(self, name: str) -> Attributes:
-        return Attributes(tiledb.open(self._headers.uri, attr=name), self._indexer_cls)
+        return Attributes(
+            tiledb.open(self._headers.uri, attr=name, ctx=self._ctx), self._indexer_cls
+        )
 
     @cached_property
     def depth_slice(self) -> Depth:
@@ -176,18 +183,21 @@ class StructuredSegy(Segy):
 URI = Union[str, PurePath]
 
 
-def open(uri: URI) -> Segy:
+def open(uri: URI, config: Optional[tiledb.Config] = None) -> Segy:
     uri = urlpath.URL(uri) if not isinstance(uri, PurePath) else uri
-    ts = open2(data_uri=uri / "data", headers_uri=uri / "headers")
+    ts = open2(uri / "data", uri / "headers", config)
     ts._uri = uri
     return ts
 
 
-def open2(data_uri: URI, headers_uri: URI) -> Segy:
-    data = tiledb.open(str(data_uri), attr="trace")
-    headers = tiledb.open(str(headers_uri))
+def open2(
+    data_uri: URI, headers_uri: URI, config: Optional[tiledb.Config] = None
+) -> Segy:
+    ctx = tiledb.Ctx(config)
+    data = tiledb.open(str(data_uri), attr="trace", ctx=ctx)
+    headers = tiledb.open(str(headers_uri), ctx=ctx)
     if data.schema.domain.has_dim("traces"):
         cls = Segy
     else:
         cls = StructuredSegy
-    return cls(data, headers)
+    return cls(data, headers, ctx=ctx)
