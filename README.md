@@ -104,10 +104,11 @@ the public attributes (`ilines`, `xlines`, `offsets`, `samples`) and addressing 
 (`trace`, `header`, `attributes`', `iline`, `xline`, `fast`, `slow`, `depth_slice`,
 `gather`,  `text`, `bin`).
 
-You can find `tiledb-segy` usage examples in the included
-[Jupyter notebook](https://github.com/TileDB-Inc/TileDB-Segy/blob/master/tutorial.ipynb).
+You can find usage examples in the following Jupyter notebooks:
+- [TileDB-Segy tutorial](https://github.com/TileDB-Inc/TileDB-Segy/blob/master/notebooks/tutorial.ipynb)
+- [Seismic inversion of real data](https://github.com/TileDB-Inc/TileDB-Segy/blob/master/notebooks/seismic_inversion.ipynb)
 
-The following list outlines the main differences from `segyio`:
+### Differences from segyio ###
 
 - Addressing modes that return a generator of numpy arrays in `segyio`, in `tiledb-segy`
   they return a single numpy array of higher dimension. For example, in a SEG-Y with
