@@ -1,3 +1,4 @@
+import itertools as it
 from collections import abc
 from functools import singledispatch
 from typing import Any, Iterable, List, Mapping, Union
@@ -34,9 +35,7 @@ def assert_equal_arrays(
 
 
 def as_array(obj: Union[np.ndarray, Iterable[np.ndarray]]) -> np.ndarray:
-    if not isinstance(obj, np.ndarray):
-        obj = np.array(list(map(np.copy, obj)))
-    return obj
+    return obj if isinstance(obj, np.ndarray) else segyio.tools.collect(obj)
 
 
 @singledispatch
@@ -55,7 +54,8 @@ def _stringify_keys_iter(s: Iterable[Mapping[int, int]]) -> List[Mapping[str, in
 
 
 def iter_slices(i: int, j: int) -> Iterable[slice]:
-    return slice(None, None), slice(None, j), slice(i, None), slice(i, j)
+    assert i < j
+    return it.starmap(slice, it.product((None, i), (None, j), (None, 2)))
 
 
 class TestSegy:
@@ -392,8 +392,10 @@ class TestStructuredSegy:
         assert_equal_arrays(t.gather[i, x, o], as_array(s.gather[i, x, o]), reshape)
         if len(s.offsets) > 1:
             for sl in iter_slices(s.offsets[1], s.offsets[3]):
-                assert_equal_arrays(
-                    t.gather[i, x, sl], as_array(s.gather[i, x, sl]), reshape
-                )
+                # TODO: remove this condition when https://github.com/equinor/segyio/pull/500 is merged
+                if sl.start is not None or sl.step in (None, 1):
+                    assert_equal_arrays(
+                        t.gather[i, x, sl], as_array(s.gather[i, x, sl]), reshape
+                    )
         else:
             assert_equal_arrays(t.gather[i, x, :], as_array(s.gather[i, x, :]), reshape)
