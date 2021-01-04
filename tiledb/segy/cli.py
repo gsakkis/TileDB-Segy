@@ -117,5 +117,5 @@ def main(argv: Optional[List[str]] = None) -> None:
         converter.to_tiledb(args.output)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: nocover
     main()
