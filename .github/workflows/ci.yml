@@ -38,6 +38,7 @@ jobs:
   test:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         # TODO: Add 3.9 after https://github.com/equinor/segyio/pull/486 is released
