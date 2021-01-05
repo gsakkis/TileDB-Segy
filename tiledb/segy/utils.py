@@ -127,18 +127,18 @@ def ensure_slice(obj: object) -> slice:
 
 
 @ensure_slice.register(slice)
-def ensure_slice_identity(s: slice) -> slice:
+def _ensure_slice_slice(s: slice) -> slice:
     return s
 
 
 @ensure_slice.register(int)
 @ensure_slice.register(np.integer)
-def ensure_slice_int(i: Int) -> slice:
+def _ensure_slice_int(i: Int) -> slice:
     return slice(i, i + 1)
 
 
 @ensure_slice.register(np.ndarray)
-def ensure_slice_array(a: np.ndarray) -> slice:
+def _ensure_slice_array(a: np.ndarray) -> slice:
     if not issubclass(a.dtype.type, np.integer):
         raise ValueError("Non-integer array cannot be converted to slice")
     if a.ndim > 1:
