@@ -69,6 +69,7 @@ jobs:
             --cov-report=term-missing
             --cov-report=html:coverage
             --cov-report=xml:coverage/coverage.xml
+            --numprocesses=4
           "
       - name: Archive code coverage results
         uses: actions/upload-artifact@v2
