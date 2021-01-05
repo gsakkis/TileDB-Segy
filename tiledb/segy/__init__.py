@@ -26,7 +26,7 @@ from .indexables import (
     Line,
     Trace,
 )
-from .utils import StructuredTraceIndexer, TraceIndexer
+from .utils import StructuredTraceIndexer, TiledbArrayWrapper, TraceIndexer
 
 
 class Segy:
@@ -39,8 +39,8 @@ class Segy:
         uri: Optional[PurePath] = None,
         ctx: Optional[tiledb.Ctx] = None,
     ):
-        self._data = data
-        self._headers = headers
+        self._data = TiledbArrayWrapper(data)
+        self._headers = TiledbArrayWrapper(headers)
         self._uri = uri or PurePath(os.devnull)
         self._ctx = ctx
 
@@ -81,7 +81,7 @@ class Segy:
 
     def attributes(self, name: str) -> Attributes:
         tdb = tiledb.open(self._headers.uri, attr=name, ctx=self._ctx)
-        return Attributes(tdb, self._indexer_cls(tdb.shape))
+        return Attributes(TiledbArrayWrapper(tdb), self._indexer_cls(tdb.shape))
 
     @cached_property
     def depth_slice(self) -> Depth:

@@ -1,8 +1,9 @@
 import itertools as it
 from functools import singledispatch
-from typing import TYPE_CHECKING, List, Tuple, Union
+from typing import TYPE_CHECKING, List, Tuple, TypeVar, Union
 
 import numpy as np
+import wrapt
 
 from .singledispatchmethod import singledispatchmethod  # type: ignore
 
@@ -20,6 +21,33 @@ else:
 
 Int = Union[int, np.integer]
 Index = Union[Int, slice]
+T = TypeVar("T")
+
+
+class TiledbArrayWrapper(wrapt.ObjectProxy):
+    """
+    TileDB array wrapper that provides standard python/numpy semantics for
+    indexing slices with negative step.
+    """
+
+    def __getitem__(self, i: Union[ellipsis, Index, Tuple[Index, ...]]) -> np.ndarray:
+        return self.__wrapped__[self._normalize_index(i)]
+
+    @singledispatchmethod
+    def _normalize_index(self, i: T) -> T:
+        return i
+
+    @_normalize_index.register(slice)
+    def _normalize_slice(self, s: slice) -> slice:
+        if s.step is None or s.step > 0 or s.start is s.stop is None:
+            return s
+        start = s.stop + 1 if s.stop is not None else None
+        stop = s.start + 1 if s.start is not None else None
+        return slice(start, stop, s.step)
+
+    @_normalize_index.register(tuple)
+    def _normalize_tuple(self, t: Tuple[Index, ...]) -> Tuple[Index, ...]:
+        return tuple(map(self._normalize_index, t))
 
 
 class TraceIndexer:
@@ -59,6 +87,8 @@ class StructuredTraceIndexer(TraceIndexer):
         raveled_indices = np.arange(len(self))[trace_index]
         unraveled_indices = np.unravel_index(raveled_indices, self._shape)
         unique_unraveled_indices = tuple(map(np.unique, unraveled_indices))
+        if (trace_index.step or 1) < 0:
+            unique_unraveled_indices = tuple(map(np.flip, unique_unraveled_indices))
         bounding_box = tuple(map(ensure_slice, unique_unraveled_indices))
 
         # find the requested subset of indices from the cartesian product

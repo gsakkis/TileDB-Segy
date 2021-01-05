@@ -52,8 +52,12 @@ def _stringify_keys_iter(s: Iterable[Mapping[int, int]]) -> List[Mapping[str, in
 
 
 def iter_slices(i: int, j: int) -> Iterable[slice]:
-    assert i < j
-    return it.starmap(slice, it.product((None, i), (None, j), (None, 2)))
+    assert 0 <= i < j
+    slice_args = it.chain(
+        it.product((None, i), (None, j), (None, 2)),
+        it.product((None, j - 1), (None, i - 1) if i > 0 else (None,), (-1, -2)),
+    )
+    return it.starmap(slice, slice_args)
 
 
 class TestSegy:
@@ -134,7 +138,16 @@ class TestSegy:
 
         i = np.random.randint(0, s.tracecount // 2)
         assert t.header[i] == stringify_keys(s.header[i])
-        for sl in slice(None, 3), slice(-3, None), slice(i, i + 3):
+
+        slices = [
+            slice(None, 3),
+            slice(-3, None),
+            slice(i, i + 3),
+            slice(3, None, -1),
+            slice(None, -3, -1),
+            slice(i + 3, i, -1),
+        ]
+        for sl in slices:
             try:
                 assert t.header[sl] == stringify_keys(s.header[sl])
             except MultiSliceError as ex:

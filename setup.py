@@ -15,7 +15,7 @@ setup(
     author="George Sakkis",
     author_email="george.sakkis@gmail.com",
     packages=["tiledb.segy"],
-    install_requires=["cached_property", "segyio>=1.9.5", "tiledb", "urlpath"],
+    install_requires=["cached_property", "segyio>=1.9.5", "tiledb", "urlpath", "wrapt"],
     setup_requires=["pytest-runner"],
     tests_require=["pytest", "pytest-coverage", "pytest-xdist", "filelock"],
     entry_points={"console_scripts": ["segy2tiledb=tiledb.segy.cli:main"]},
