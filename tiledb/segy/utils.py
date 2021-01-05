@@ -59,12 +59,7 @@ class StructuredTraceIndexer(TraceIndexer):
         raveled_indices = np.arange(len(self))[trace_index]
         unraveled_indices = np.unravel_index(raveled_indices, self._shape)
         unique_unraveled_indices = tuple(map(np.unique, unraveled_indices))
-        try:
-            bounding_box = tuple(map(ensure_slice, unique_unraveled_indices))
-        except ValueError:
-            raise NotImplementedError(
-                "Multi-range subarrays are not currently supported"
-            )
+        bounding_box = tuple(map(ensure_slice, unique_unraveled_indices))
 
         # find the requested subset of indices from the cartesian product
         points = frozenset(zip(*unraveled_indices))
@@ -121,6 +116,10 @@ class LabelIndexer:
         return indices[self._labels[indices] == label_range]
 
 
+class MultiSliceError(ValueError):
+    pass
+
+
 @singledispatch
 def ensure_slice(obj: object) -> slice:
     raise TypeError(f"Cannot convert {obj.__class__} to slice")
@@ -155,7 +154,7 @@ def _ensure_slice_array(a: np.ndarray) -> slice:
         )
     unique_diffs = np.unique(diffs)
     if len(unique_diffs) > 1:
-        raise ValueError("Non-range array cannot be converted to a slice")
+        raise MultiSliceError("Array is not convertible to a single range")
 
     start = a[0]
     step = unique_diffs[0]

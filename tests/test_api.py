@@ -12,7 +12,7 @@ from tiledb.libtiledb import TileDBError
 import tiledb.segy
 from tests.conftest import parametrize_segys
 from tiledb.segy import Segy, StructuredSegy
-from tiledb.segy.utils import Index
+from tiledb.segy.utils import Index, MultiSliceError
 
 collect = segyio.tools.collect
 
@@ -122,7 +122,7 @@ class TestSegy:
                 # slices traces, slice samples
                 for sl2 in iter_slices(x, y):
                     assert_equal_arrays(t.trace[sl1, sl2], collect(s.trace[sl1, sl2]))
-            except NotImplementedError as ex:
+            except MultiSliceError as ex:
                 pytest.xfail(str(ex))
 
         with pytest.raises((IndexError, TypeError)):
@@ -137,7 +137,7 @@ class TestSegy:
         for sl in slice(None, 3), slice(-3, None), slice(i, i + 3):
             try:
                 assert t.header[sl] == stringify_keys(s.header[sl])
-            except NotImplementedError as ex:
+            except MultiSliceError as ex:
                 pytest.xfail(str(ex))
 
         with pytest.raises(TypeError):
@@ -156,7 +156,7 @@ class TestSegy:
         for sl in iter_slices(i, j):
             try:
                 assert_equal_arrays(t_attrs[sl], s_attrs[sl])
-            except NotImplementedError as ex:
+            except MultiSliceError as ex:
                 pytest.xfail(str(ex))
 
         with pytest.raises(TypeError):
