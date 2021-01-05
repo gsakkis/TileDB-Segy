@@ -14,6 +14,8 @@ from tests.conftest import parametrize_segys
 from tiledb.segy import Segy, StructuredSegy
 from tiledb.segy.utils import Index
 
+collect = segyio.tools.collect
+
 
 def assert_equal_arrays(
     a: Union[np.ndarray, np.number],
@@ -32,10 +34,6 @@ def assert_equal_arrays(
         assert a.ndim == b.ndim
         assert a.shape == b.shape
     np.testing.assert_array_equal(a, b)
-
-
-def as_array(obj: Union[np.ndarray, Iterable[np.ndarray]]) -> np.ndarray:
-    return obj if isinstance(obj, np.ndarray) else segyio.tools.collect(obj)
 
 
 @singledispatch
@@ -118,12 +116,12 @@ class TestSegy:
         for sl1 in iter_slices(i, j):
             try:
                 # slices traces, all samples
-                assert_equal_arrays(t.trace[sl1], as_array(s.trace[sl1]))
+                assert_equal_arrays(t.trace[sl1], collect(s.trace[sl1]))
                 # slices traces, one sample
-                assert_equal_arrays(t.trace[sl1, x], as_array(s.trace[sl1, x]))
+                assert_equal_arrays(t.trace[sl1, x], collect(s.trace[sl1, x]))
                 # slices traces, slice samples
                 for sl2 in iter_slices(x, y):
-                    assert_equal_arrays(t.trace[sl1, sl2], as_array(s.trace[sl1, sl2]))
+                    assert_equal_arrays(t.trace[sl1, sl2], collect(s.trace[sl1, sl2]))
             except NotImplementedError as ex:
                 pytest.xfail(str(ex))
 
@@ -174,7 +172,7 @@ class TestSegy:
         assert_equal_arrays(t.depth_slice[i], s.depth_slice[i])
         # slice depths
         for sl in iter_slices(i, j):
-            assert_equal_arrays(t.depth_slice[sl], as_array(s.depth_slice[sl]))
+            assert_equal_arrays(t.depth_slice[sl], collect(s.depth_slice[sl]))
 
     @parametrize_segys("t", "s")
     def test_dt(self, t: Segy, s: SegyFile) -> None:
@@ -228,9 +226,9 @@ class TestStructuredSegy:
 
         for sl in iter_slices(i, j):
             # slice lines, first offset
-            assert_equal_arrays(t_line[sl], as_array(s_line[sl]))
+            assert_equal_arrays(t_line[sl], collect(s_line[sl]))
             # slice lines, x offset
-            assert_equal_arrays(t_line[sl, x], as_array(s_line[sl, x]))
+            assert_equal_arrays(t_line[sl, x], collect(s_line[sl, x]))
 
     @pytest.mark.parametrize("line,lines", [("iline", "ilines"), ("xline", "xlines")])
     @parametrize_segys("t", "s", structured=True, multiple_offsets=True)
@@ -245,13 +243,13 @@ class TestStructuredSegy:
         i, j = np.sort(np.random.choice(getattr(s, lines), 2, replace=False))
         for sl2 in iter_slices(s.offsets[1], s.offsets[3]):
             # one line, slice offsets
-            assert_equal_arrays(t_line[i, sl2], as_array(s_line[i, sl2]))
+            assert_equal_arrays(t_line[i, sl2], collect(s_line[i, sl2]))
 
             for sl1 in iter_slices(i, j):
                 # slice lines, slice offsets
                 # segyio flattens the (lines, offsets) dimensions into one
                 assert_equal_arrays(
-                    t_line[sl1, sl2], as_array(s_line[sl1, sl2]), reshape=True
+                    t_line[sl1, sl2], collect(s_line[sl1, sl2]), reshape=True
                 )
 
     @pytest.mark.parametrize("line,lines", [("iline", "ilines"), ("xline", "xlines")])
@@ -388,14 +386,14 @@ class TestStructuredSegy:
         o = s.offsets[0]
         # segyio flattens the (ilines, xlines) dimensions into one
         reshape = isinstance(i, slice) and isinstance(x, slice)
-        assert_equal_arrays(t.gather[i, x], as_array(s.gather[i, x]), reshape)
-        assert_equal_arrays(t.gather[i, x, o], as_array(s.gather[i, x, o]), reshape)
+        assert_equal_arrays(t.gather[i, x], collect(s.gather[i, x]), reshape)
+        assert_equal_arrays(t.gather[i, x, o], collect(s.gather[i, x, o]), reshape)
         if len(s.offsets) > 1:
             for sl in iter_slices(s.offsets[1], s.offsets[3]):
                 # TODO: remove this condition when https://github.com/equinor/segyio/pull/500 is merged
                 if sl.start is not None or sl.step in (None, 1):
                     assert_equal_arrays(
-                        t.gather[i, x, sl], as_array(s.gather[i, x, sl]), reshape
+                        t.gather[i, x, sl], collect(s.gather[i, x, sl]), reshape
                     )
         else:
-            assert_equal_arrays(t.gather[i, x, :], as_array(s.gather[i, x, :]), reshape)
+            assert_equal_arrays(t.gather[i, x, :], collect(s.gather[i, x, :]), reshape)
