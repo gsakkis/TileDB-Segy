@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple, Type, Union, cast
+from typing import Dict, List, Tuple, Union, cast
 
 import numpy as np
 
@@ -20,9 +20,6 @@ class TraceIndexable:
 
 
 class Trace(TraceIndexable):
-    def __init__(self, tdb: tiledb.Array, indexer_cls: Type[TraceIndexer]):
-        super().__init__(tdb, indexer_cls(tdb.shape[:-1]))
-
     def __getitem__(self, i: Union[Index, Tuple[Index, Index]]) -> np.ndarray:
         if isinstance(i, tuple):
             trace_index, samples = i
@@ -40,9 +37,6 @@ class Trace(TraceIndexable):
 
 
 class Header(TraceIndexable):
-    def __init__(self, tdb: tiledb.Array, indexer_cls: Type[TraceIndexer]):
-        super().__init__(tdb, indexer_cls(tdb.shape))
-
     @singledispatchmethod
     def __getitem__(self, i: object) -> None:
         raise TypeError(f"Cannot index by {i.__class__}")
@@ -62,9 +56,6 @@ class Header(TraceIndexable):
 
 
 class Attributes(TraceIndexable):
-    def __init__(self, tdb: tiledb.Array, indexer_cls: Type[TraceIndexer]):
-        super().__init__(tdb, indexer_cls(tdb.shape))
-
     def __getitem__(self, i: Index) -> np.ndarray:
         bounding_box, post_reshape_indices = self._indexer[ensure_slice(i)]
         return self._tdb[bounding_box].reshape(-1)[post_reshape_indices]

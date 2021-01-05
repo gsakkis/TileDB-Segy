@@ -73,16 +73,15 @@ class Segy:
 
     @cached_property
     def trace(self) -> Trace:
-        return Trace(self._data, self._indexer_cls)
+        return Trace(self._data, self._indexer_cls(self._data.shape[:-1]))
 
     @cached_property
     def header(self) -> Header:
-        return Header(self._headers, self._indexer_cls)
+        return Header(self._headers, self._indexer_cls(self._headers.shape))
 
     def attributes(self, name: str) -> Attributes:
-        return Attributes(
-            tiledb.open(self._headers.uri, attr=name, ctx=self._ctx), self._indexer_cls
-        )
+        tdb = tiledb.open(self._headers.uri, attr=name, ctx=self._ctx)
+        return Attributes(tdb, self._indexer_cls(tdb.shape))
 
     @cached_property
     def depth_slice(self) -> Depth:
