@@ -1,3 +1,4 @@
+import pathlib
 from unittest import mock
 
 import pytest
@@ -7,7 +8,9 @@ from tiledb.segy import cli
 
 @mock.patch("segyio.open")
 @mock.patch("tiledb.segy.cli.SegyFileConverter")
-def test_minimal(SegyFileConverter, segyio_open, tmp_path):
+def test_minimal(
+    SegyFileConverter: mock.Mock, segyio_open: mock.Mock, tmp_path: pathlib.Path
+) -> None:
     cli.main([str(tmp_path)])
 
     assert segyio_open.call_count == 1
@@ -30,7 +33,9 @@ def test_minimal(SegyFileConverter, segyio_open, tmp_path):
 
 @mock.patch("segyio.su.open")
 @mock.patch("tiledb.segy.cli.SegyFileConverter")
-def test_maximal(SegyFileConverter, segyio_open, tmp_path):
+def test_maximal(
+    SegyFileConverter: mock.Mock, segyio_open: mock.Mock, tmp_path: pathlib.Path
+) -> None:
     output_path = tmp_path.with_suffix(".tdb")
     output_path.mkdir()
     cli.main(
@@ -66,7 +71,7 @@ def test_maximal(SegyFileConverter, segyio_open, tmp_path):
     assert to_tiledb.call_args[1] == {}
 
 
-def test_output_exists_error(tmp_path):
+def test_output_exists_error(tmp_path: pathlib.Path) -> None:
     tmp_path.with_suffix(".tsgy").mkdir()
     with pytest.raises(SystemExit):
         cli.main([str(tmp_path)])

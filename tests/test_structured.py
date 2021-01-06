@@ -1,197 +1,119 @@
-import itertools as it
-from collections import abc
-from functools import singledispatch
-from typing import Any, Iterable, List, Mapping, Union
+from typing import Any, Type, Union
 
 import numpy as np
 import pytest
 import segyio.tools
-from segyio import SegyFile, TraceField, TraceSortingFormat
-from tiledb.libtiledb import TileDBError
+from segyio import SegyFile, TraceSortingFormat
 
-import tiledb.segy
-from tests.conftest import parametrize_segys
-from tiledb.segy import Segy, StructuredSegy
-from tiledb.segy.types import Index
-from tiledb.segy.utils import MultiSliceError
+from tiledb.segy.structured import Index, LabelIndexer, StructuredSegy
 
+from .conftest import (
+    assert_equal_arrays,
+    iter_slices,
+    parametrize_segys,
+    stringify_keys,
+)
+
+Int = Union[int, np.integer]
+int_types = (
+    int,
+    np.int64,
+    np.int32,
+    np.int16,
+    np.int8,
+    np.uint64,
+    np.uint32,
+    np.uint16,
+    np.uint8,
+)
 collect = segyio.tools.collect
 
 
-def assert_equal_arrays(
-    a: Union[np.ndarray, np.number],
-    b: Union[np.ndarray, np.number],
-    reshape: bool = False,
-) -> None:
-    assert a.dtype == b.dtype
-    if isinstance(a, np.number) or isinstance(b, np.number):
-        assert isinstance(a, np.number) and isinstance(b, np.number)
-        assert a == b
-    elif reshape:
-        assert a.ndim == b.ndim + 1
-        assert a.shape[2:] == b.shape[1:]
-        b = b.reshape(a.shape)
-    else:
-        assert a.ndim == b.ndim
-        assert a.shape == b.shape
-    np.testing.assert_array_equal(a, b)
+class TestLabelIndexer:
+    def test_invalid_array_duplicates(self) -> None:
+        pytest.raises(ValueError, LabelIndexer, np.array([1, 2, 3, 2]))
 
+    @pytest.mark.parametrize("dtype", [float, np.float32, np.bool_])
+    def test_invalid_array_dtype(self, dtype: Type[Any]) -> None:
+        pytest.raises(ValueError, LabelIndexer, np.array([1, 2, 3], dtype))
 
-@singledispatch
-def stringify_keys(o: object) -> Any:
-    raise TypeError(f"Cannot stringify_keys for {o.__class__}")
-
-
-@stringify_keys.register(abc.Mapping)
-def _stringify_keys_mapping(d: Mapping[int, int]) -> Mapping[str, int]:
-    return {str(k): v for k, v in d.items()}
-
-
-@stringify_keys.register(abc.Iterable)
-def _stringify_keys_iter(s: Iterable[Mapping[int, int]]) -> List[Mapping[str, int]]:
-    return list(map(stringify_keys, s))
-
-
-def iter_slices(i: int, j: int) -> Iterable[slice]:
-    assert 0 <= i < j
-    slice_args = it.chain(
-        it.product((None, i), (None, j), (None, 2)),
-        it.product((None, j - 1), (None, i - 1) if i > 0 else (None,), (-1, -2)),
-    )
-    return it.starmap(slice, slice_args)
-
-
-class TestSegy:
-    @parametrize_segys("t", "s")
-    def test_sorting(self, t: Segy, s: SegyFile) -> None:
-        assert t.sorting == s.sorting
-
-    @parametrize_segys("t", "s")
-    def test_bin(self, t: Segy, s: SegyFile) -> None:
-        assert t.bin == stringify_keys(s.bin)
-
-    @parametrize_segys("t", "s")
-    def test_text(self, t: Segy, s: SegyFile) -> None:
-        assert t.text == tuple(s.text)
-
-    @parametrize_segys("t", "s")
-    def test_samples(self, t: Segy, s: SegyFile) -> None:
-        assert_equal_arrays(t.samples, s.samples)
-
-    @parametrize_segys("t", "s")
-    def test_close(self, t: Segy, s: SegyFile) -> None:
-        t.bin
-        t.close()
-        with pytest.raises(TileDBError):
-            t.bin
-
-    @parametrize_segys("t", "s")
-    def test_context_manager(self, t: Segy, s: SegyFile) -> None:
-        with tiledb.segy.open(t.uri) as t2:
-            t2.bin
-        with pytest.raises(TileDBError):
-            t2.bin
-
-    @parametrize_segys("t", "s")
-    def test_repr(self, t: Segy, s: SegyFile) -> None:
-        if s.unstructured:
-            assert repr(t) == f"Segy('{t.uri}')"
-        else:
-            assert repr(t) == f"StructuredSegy('{t.uri}')"
-
-    @parametrize_segys("t", "s")
-    def test_trace(self, t: Segy, s: SegyFile) -> None:
-        assert len(t.trace) == len(s.trace) == s.tracecount
-
-        i = np.random.randint(0, s.tracecount // 2)
-        j = np.random.randint(i + 1, s.tracecount)
-        x = np.random.randint(0, len(s.samples) // 2)
-        y = np.random.randint(x + 1, len(s.samples))
-
-        # one trace, all samples
-        assert_equal_arrays(t.trace[i], s.trace[i])
-
-        # one trace, one sample
-        assert_equal_arrays(t.trace[i, x], s.trace[i, x])
-
-        # one trace, slice samples
-        for sl in iter_slices(x, y):
-            assert_equal_arrays(t.trace[i, sl], s.trace[i, sl])
-
-        for sl1 in iter_slices(i, j):
-            try:
-                # slices traces, all samples
-                assert_equal_arrays(t.trace[sl1], collect(s.trace[sl1]))
-                # slices traces, one sample
-                assert_equal_arrays(t.trace[sl1, x], collect(s.trace[sl1, x]))
-                # slices traces, slice samples
-                for sl2 in iter_slices(x, y):
-                    assert_equal_arrays(t.trace[sl1, sl2], collect(s.trace[sl1, sl2]))
-            except MultiSliceError as ex:
-                pytest.xfail(str(ex))
-
-        with pytest.raises((IndexError, TypeError)):
-            t.trace[float(i), 0]
-
-    @parametrize_segys("t", "s")
-    def test_header(self, t: Segy, s: SegyFile) -> None:
-        assert len(t.header) == len(s.header)
-
-        i = np.random.randint(0, s.tracecount // 2)
-        assert t.header[i] == stringify_keys(s.header[i])
-
-        slices = [
-            slice(None, 3),
-            slice(-3, None),
-            slice(i, i + 3),
-            slice(3, None, -1),
-            slice(None, -3, -1),
-            slice(i + 3, i, -1),
-        ]
-        for sl in slices:
-            try:
-                assert t.header[sl] == stringify_keys(s.header[sl])
-            except MultiSliceError as ex:
-                pytest.xfail(str(ex))
-
+    @pytest.mark.parametrize("obj", [3.1, "3", None, (1, 2)])
+    def test_get_invalid_type(self, obj: Any) -> None:
+        indexer = LabelIndexer(np.array([1, 2, 3]))
         with pytest.raises(TypeError):
-            t.header[i, 0]
+            indexer[obj]
 
-    @parametrize_segys("t", "s")
-    def test_attributes(self, t: Segy, s: SegyFile) -> None:
-        str_attr = "TraceNumber"
-        t_attrs = t.attributes(str_attr)
-        s_attrs = s.attributes(getattr(TraceField, str_attr))
-        assert len(t_attrs) == len(s_attrs)
+    @pytest.mark.parametrize("dtype", int_types)
+    def test_get_int(self, dtype: Type[Int]) -> None:
+        array = np.array([10, 21, 32], dtype)
+        indexer = LabelIndexer(array)
+        assert indexer[array[0]] == 0
+        assert indexer[array[1]] == 1
+        assert indexer[array[2]] == 2
+        with pytest.raises(ValueError):
+            indexer[dtype(42)]
 
-        i = np.random.randint(0, s.tracecount // 2)
-        j = np.random.randint(i + 1, s.tracecount)
-        assert_equal_arrays(t_attrs[i], s_attrs[i])
-        for sl in iter_slices(i, j):
-            try:
-                assert_equal_arrays(t_attrs[sl], s_attrs[sl])
-            except MultiSliceError as ex:
-                pytest.xfail(str(ex))
+    @pytest.mark.parametrize("dtype", int_types)
+    def test_get_slice_increasing_array(self, dtype: Type[Int]) -> None:
+        array = np.array([10, 13, 17, 21, 26, 29, 31], dtype)
+        indexer = LabelIndexer(array)
 
-        with pytest.raises(TypeError):
-            t_attrs[i, 0]
+        assert indexer[5:21] == slice(0, 3, 1)
+        assert indexer[5:22] == slice(0, 4, 1)
+        assert indexer[11:21] == slice(1, 3, 1)
+        assert indexer[13:23:2] == slice(1, 4, 1)
+        assert indexer[13:33:8] == slice(1, 6, 2)
 
-    @parametrize_segys("t", "s")
-    def test_depth_slice(self, t: Segy, s: SegyFile) -> None:
-        assert len(t.depth_slice) == len(s.depth_slice)
+        label_slice = slice(10, 32, 7)
+        assert np.array_equal(
+            indexer._label_slice_to_indices(label_slice), np.array([0, 2, 6])
+        )
+        with pytest.raises(ValueError):
+            indexer[label_slice]
 
-        i = np.random.randint(0, len(s.samples) // 2)
-        j = np.random.randint(i + 1, len(s.samples))
-        # one depth
-        assert_equal_arrays(t.depth_slice[i], s.depth_slice[i])
-        # slice depths
-        for sl in iter_slices(i, j):
-            assert_equal_arrays(t.depth_slice[sl], collect(s.depth_slice[sl]))
+        assert indexer[20:5:-1] == slice(2, -1, -1)
+        assert indexer[21:5:-1] == slice(3, -1, -1)
+        assert indexer[21:12:-1] == slice(3, 0, -1)
+        assert indexer[19:12:-2] == slice(2, 0, -1)
+        assert indexer[29:10:-8] == slice(5, 0, -2)
 
-    @parametrize_segys("t", "s")
-    def test_dt(self, t: Segy, s: SegyFile) -> None:
-        assert t.dt() == segyio.tools.dt(s)
-        assert t.dt(fallback=1234) == segyio.tools.dt(s, fallback_dt=1234)
+        label_slice = slice(31, 20, -5)
+        assert np.array_equal(
+            indexer._label_slice_to_indices(label_slice), np.array([6, 4, 3])
+        )
+        with pytest.raises(ValueError):
+            indexer[label_slice]
+
+    @pytest.mark.parametrize("dtype", int_types)
+    def test_get_slice_decreasing_array(self, dtype: Type[Int]) -> None:
+        array = np.array([31, 29, 26, 21, 17, 13, 10], dtype)
+        indexer = LabelIndexer(array)
+
+        assert indexer[5:21] == slice(6, 3, -1)
+        assert indexer[5:22] == slice(6, 2, -1)
+        assert indexer[11:21] == slice(5, 3, -1)
+        assert indexer[13:23:2] == slice(5, 2, -1)
+        assert indexer[13:33:8] == slice(5, 0, -2)
+
+        label_slice = slice(10, 32, 7)
+        assert np.array_equal(
+            indexer._label_slice_to_indices(label_slice), np.array([6, 4, 0])
+        )
+        with pytest.raises(ValueError):
+            indexer[label_slice]
+
+        assert indexer[20:5:-1] == slice(4, 7, 1)
+        assert indexer[21:5:-1] == slice(3, 7, 1)
+        assert indexer[21:12:-1] == slice(3, 6, 1)
+        assert indexer[19:12:-2] == slice(4, 6, 1)
+        assert indexer[29:10:-8] == slice(1, 6, 2)
+
+        label_slice = slice(31, 20, -5)
+        assert np.array_equal(
+            indexer._label_slice_to_indices(label_slice), np.array([0, 2, 3])
+        )
+        with pytest.raises(ValueError):
+            indexer[label_slice]
 
 
 class TestStructuredSegy:

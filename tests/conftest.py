@@ -1,7 +1,20 @@
 import itertools as it
+from collections import abc
+from functools import singledispatch
 from pathlib import Path
-from typing import Any, Callable, Iterator, Optional, Tuple
+from typing import (
+    Any,
+    Callable,
+    Iterable,
+    Iterator,
+    List,
+    Mapping,
+    Optional,
+    Tuple,
+    Union,
+)
 
+import numpy as np
 import pytest
 import segyio
 from filelock import FileLock
@@ -81,3 +94,46 @@ def parametrize_segys(
         iter_tsgy_sgy_files(structured, multiple_offsets),
         ids=lambda x: x.uri.stem if isinstance(x, Segy) else None,
     )
+
+
+def assert_equal_arrays(
+    a: Union[np.ndarray, np.number],
+    b: Union[np.ndarray, np.number],
+    reshape: bool = False,
+) -> None:
+    assert a.dtype == b.dtype
+    if isinstance(a, np.number) or isinstance(b, np.number):
+        assert isinstance(a, np.number) and isinstance(b, np.number)
+        assert a == b
+    elif reshape:
+        assert a.ndim == b.ndim + 1
+        assert a.shape[2:] == b.shape[1:]
+        b = b.reshape(a.shape)
+    else:
+        assert a.ndim == b.ndim
+        assert a.shape == b.shape
+    np.testing.assert_array_equal(a, b)
+
+
+def iter_slices(i: int, j: int) -> Iterable[slice]:
+    assert 0 <= i < j
+    slice_args = it.chain(
+        it.product((None, i), (None, j), (None, 2)),
+        it.product((None, j - 1), (None, i - 1) if i > 0 else (None,), (-1, -2)),
+    )
+    return it.starmap(slice, slice_args)
+
+
+@singledispatch
+def stringify_keys(o: object) -> Any:
+    raise TypeError(f"Cannot stringify_keys for {o.__class__}")
+
+
+@stringify_keys.register(abc.Mapping)
+def _stringify_keys_mapping(d: Mapping[int, int]) -> Mapping[str, int]:
+    return {str(k): v for k, v in d.items()}
+
+
+@stringify_keys.register(abc.Iterable)
+def _stringify_keys_iter(s: Iterable[Mapping[int, int]]) -> List[Mapping[str, int]]:
+    return list(map(stringify_keys, s))

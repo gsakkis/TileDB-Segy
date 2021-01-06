@@ -1,3 +1,5 @@
+import pathlib
+
 import pytest
 import segyio
 from segyio import TraceSortingFormat
@@ -7,7 +9,7 @@ from tiledb.segy.convert import SegyFileConverter
 from .segyio_utils import generate_structured_segy, generate_unstructured_segy
 
 
-def test_convert_unstructured_segy(tmp_path):
+def test_convert_unstructured_segy(tmp_path: pathlib.Path) -> None:
     segy_path = tmp_path / "input.segy"
     generate_unstructured_segy(segy_path, traces=10, samples=10)
     tsgy_path = segy_path.with_suffix(".tsgy")
@@ -18,7 +20,7 @@ def test_convert_unstructured_segy(tmp_path):
 @pytest.mark.parametrize(
     "sorting", [TraceSortingFormat.INLINE_SORTING, TraceSortingFormat.CROSSLINE_SORTING]
 )
-def test_convert_structured_segy(sorting, tmp_path):
+def test_convert_structured_segy(sorting: int, tmp_path: pathlib.Path) -> None:
     segy_path = tmp_path / "input.segy"
     generate_structured_segy(
         segy_path,
