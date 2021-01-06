@@ -1,7 +1,5 @@
 from typing import TYPE_CHECKING, Dict, List, Union
 
-import numpy as np
-
 # https://github.com/python/typing/issues/684#issuecomment-548203158
 if TYPE_CHECKING:  # pragma: nocover
     from enum import Enum
@@ -14,9 +12,8 @@ if TYPE_CHECKING:  # pragma: nocover
 else:
     ellipsis = type(Ellipsis)
     Ellipsis = Ellipsis
-    from cached_property import cached_property  # noqa: F401
+    cached_property = __import__("cached_property").cached_property
 
-Int = Union[int, np.integer]
-Index = Union[Int, slice]
+Index = Union[int, slice]
 Field = Dict[str, int]
 NestedFieldList = Union[List[Field], List[List[Field]], List[List[List[Field]]]]

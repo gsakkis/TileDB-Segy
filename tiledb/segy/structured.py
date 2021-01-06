@@ -7,7 +7,7 @@ from segyio import TraceSortingFormat
 import tiledb
 
 from .singledispatchmethod import singledispatchmethod  # type: ignore
-from .types import Ellipsis, Index, Int, NestedFieldList, cached_property, ellipsis
+from .types import Ellipsis, Index, NestedFieldList, cached_property, ellipsis
 from .unstructured import Header, Segy, TraceIndexer
 from .utils import ensure_slice
 
@@ -19,7 +19,7 @@ class StructuredTraceIndexer(TraceIndexer):
 
     @__getitem__.register(int)
     @__getitem__.register(np.integer)
-    def _get_one(self, trace_index: Int) -> Tuple[Tuple[int, ...], ellipsis]:
+    def _get_one(self, trace_index: int) -> Tuple[Tuple[int, ...], ellipsis]:
         return np.unravel_index(trace_index, self._shape), Ellipsis
 
     @__getitem__.register(slice)
@@ -59,7 +59,7 @@ class LabelIndexer:
 
     @__getitem__.register(int)
     @__getitem__.register(np.integer)
-    def _get_one(self, label: Int) -> int:
+    def _get_one(self, label: int) -> int:
         indices = np.flatnonzero(label == self._labels)
         assert indices.size <= 1, indices
         if indices.size == 0:

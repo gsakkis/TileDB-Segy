@@ -10,7 +10,7 @@ from segyio import TraceSortingFormat
 import tiledb
 
 from .singledispatchmethod import singledispatchmethod  # type: ignore
-from .types import Ellipsis, Field, Index, Int, cached_property, ellipsis
+from .types import Ellipsis, Field, Index, cached_property, ellipsis
 from .utils import ensure_slice
 
 
@@ -68,7 +68,7 @@ class Header(TraceIndexable):
 
     @__getitem__.register(int)
     @__getitem__.register(np.integer)
-    def _get_one(self, i: Int) -> Field:
+    def _get_one(self, i: int) -> Field:
         return cast(Field, self[ensure_slice(i)][0])
 
     @__getitem__.register(slice)

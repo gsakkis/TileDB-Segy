@@ -2,8 +2,6 @@ from functools import singledispatch
 
 import numpy as np
 
-from .types import Int
-
 
 class MultiSliceError(ValueError):
     pass
@@ -21,7 +19,7 @@ def _ensure_slice_slice(s: slice) -> slice:
 
 @ensure_slice.register(int)
 @ensure_slice.register(np.integer)
-def _ensure_slice_int(i: Int) -> slice:
+def _ensure_slice_int(i: int) -> slice:
     return slice(i, i + 1)
 
 
