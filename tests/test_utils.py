@@ -1,7 +1,8 @@
 import numpy as np
 import pytest
 
-from tiledb.segy.utils import LabelIndexer, ensure_slice
+from tiledb.segy.structured import LabelIndexer
+from tiledb.segy.utils import ensure_slice
 
 int_types = (
     int,

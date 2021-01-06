@@ -12,7 +12,8 @@ from tiledb.libtiledb import TileDBError
 import tiledb.segy
 from tests.conftest import parametrize_segys
 from tiledb.segy import Segy, StructuredSegy
-from tiledb.segy.utils import Index, MultiSliceError
+from tiledb.segy.types import Index
+from tiledb.segy.utils import MultiSliceError
 
 collect = segyio.tools.collect
 
