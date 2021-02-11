@@ -53,11 +53,13 @@ class Trace(TraceIndexable):
 
         bounding_box, post_reshape_indices = self._indexer[trace_index]
         traces = self._tdb[(*bounding_box, ensure_slice(samples))]
+
+        if not (isinstance(trace_index, slice) or isinstance(samples, slice)):
+            # convert to scalar (https://github.com/equinor/segyio/issues/475)
+            return traces[0]
+
         if traces.ndim > 2:
             traces = traces.reshape(np.array(traces.shape[:-1]).prod(), -1)
-        elif traces.size == 1 and not isinstance(samples, slice):
-            # convert to scalar (https://github.com/equinor/segyio/issues/475)
-            post_reshape_indices = 0
         return traces[post_reshape_indices]
 
 

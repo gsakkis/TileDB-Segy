@@ -68,8 +68,12 @@ class TestSegy:
         # one trace, all samples
         assert_equal_arrays(t.trace[i], s.trace[i])
 
-        # one trace, one sample
+        # one trace, one sample (scalar)
         assert_equal_arrays(t.trace[i, x], s.trace[i, x])
+
+        # one-slice trace, one sample: these are (1,1) arrays, not scalar
+        assert_equal_arrays(t.trace[:1, x], collect(s.trace[:1, x]))
+        assert_equal_arrays(t.trace[0::-1, x], collect(s.trace[0::-1, x]))
 
         # one trace, slice samples
         for sl in iter_slices(x, y):
