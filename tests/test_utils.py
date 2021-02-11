@@ -38,6 +38,10 @@ class TestEnsureSlice:
     def test_invalid_array_empty(self) -> None:
         pytest.raises(ValueError, ensure_slice, np.array([], int))
 
+    @pytest.mark.parametrize("a", [(1, 0, -1), (7, 4, 1, -2)])
+    def test_invalid_array_negative(self, a: Tuple[int, ...]) -> None:
+        pytest.raises(ValueError, ensure_slice, np.array(a, int))
+
     @pytest.mark.parametrize("a", [(1, 5, 3, 2), (10, 5, 7, 8)])
     def test_invalid_array_non_monotonic(self, a: Tuple[int, ...]) -> None:
         pytest.raises(ValueError, ensure_slice, np.array(a, int))
@@ -46,8 +50,8 @@ class TestEnsureSlice:
     def test_invalid_array_non_range(self, a: Tuple[int, ...]) -> None:
         pytest.raises(ValueError, ensure_slice, np.array(a, int))
 
-    @pytest.mark.parametrize("a", [(2, 3, 4), (1, 5, 9, 13), (1, 0, -1), (7, 4, 1, -2)])
+    @pytest.mark.parametrize("a", [(2, 3, 4), (1, 5, 9, 13), (7, 4, 1), (6, 3, 0)])
     def test_valid_array(self, a: Tuple[int, ...]) -> None:
         a = np.array(a, int)
         s = ensure_slice(a)
-        assert np.array_equal(np.arange(s.start, s.stop, s.step), a)
+        assert np.array_equal(np.arange(max(a) + 1)[s], a)

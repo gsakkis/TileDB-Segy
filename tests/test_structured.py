@@ -71,8 +71,8 @@ class TestLabelIndexer:
         with pytest.raises(ValueError):
             indexer[label_slice]
 
-        assert indexer[20:5:-1] == slice(2, -1, -1)
-        assert indexer[21:5:-1] == slice(3, -1, -1)
+        assert indexer[20:5:-1] == slice(2, None, -1)
+        assert indexer[21:5:-1] == slice(3, None, -1)
         assert indexer[21:12:-1] == slice(3, 0, -1)
         assert indexer[19:12:-2] == slice(2, 0, -1)
         assert indexer[29:10:-8] == slice(5, 0, -2)

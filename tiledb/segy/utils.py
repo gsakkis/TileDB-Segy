@@ -31,6 +31,8 @@ def _ensure_slice_array(a: np.ndarray) -> slice:
         raise ValueError(f"{a.ndim}D array cannot be converted to slice")
     if a.ndim == 1 and len(a) == 0:
         raise ValueError("Empty array cannot be converted to slice")
+    if a.min() < 0:
+        raise ValueError("Array with negative indices cannot be converted to slice")
     if a.ndim == 0 or len(a) == 1:
         return ensure_slice(a.item())
 
@@ -43,7 +45,12 @@ def _ensure_slice_array(a: np.ndarray) -> slice:
     if len(unique_diffs) > 1:
         raise MultiSliceError("Array is not convertible to a single range")
 
-    start = a[0]
     step = unique_diffs[0]
-    stop = a[-1] + (1 if step > 0 else -1)
+    start = a[0]
+    if step > 0:
+        stop = a[-1] + 1
+    elif a[-1] > 0:
+        stop = a[-1] - 1
+    else:
+        stop = None
     return slice(start, stop, step)
