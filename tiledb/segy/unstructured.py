@@ -1,7 +1,7 @@
 import os
 from pathlib import PurePath
 from types import TracebackType
-from typing import List, Optional, Tuple, Type, TypeVar, Union, cast
+from typing import List, Optional, Tuple, Type, Union, cast
 
 import numpy as np
 import wrapt
@@ -108,9 +108,6 @@ class Depth:
         return np.moveaxis(data, -1, 0) if data.ndim == ndim else data
 
 
-_T = TypeVar("_T")
-
-
 class TiledbArrayWrapper(wrapt.ObjectProxy):
     """
     TileDB array wrapper that provides standard python/numpy semantics for
@@ -118,23 +115,33 @@ class TiledbArrayWrapper(wrapt.ObjectProxy):
     """
 
     def __getitem__(self, i: Union[ellipsis, Index, Tuple[Index, ...]]) -> np.ndarray:
-        return self.__wrapped__[self._normalize_index(i)]
+        return self.__wrapped__[self._normalize_index(i, self.shape[0])]
 
     @singledispatchmethod
-    def _normalize_index(self, i: _T) -> _T:
-        return i
+    def _normalize_index(
+        self, i: Union[int, ellipsis], size: int
+    ) -> Union[int, ellipsis]:
+        return i if i is Ellipsis or i >= 0 else size + i
 
     @_normalize_index.register(slice)
-    def _normalize_slice(self, s: slice) -> slice:
-        if s.step is None or s.step > 0 or s.start is s.stop is None:
-            return s
-        start = s.stop + 1 if s.stop is not None else None
-        stop = s.start + 1 if s.start is not None else None
-        return slice(start, stop, s.step)
+    def _normalize_slice(self, s: slice, size: int) -> slice:
+        start, stop, step = s.indices(size)
+        if step < 0:
+            start, stop = stop + 1, start + 1
+        return slice(start, stop, step)
 
     @_normalize_index.register(tuple)
-    def _normalize_tuple(self, t: Tuple[Index, ...]) -> Tuple[Index, ...]:
-        return tuple(map(self._normalize_index, t))
+    def _normalize_tuple(self, t: Tuple[Index, ...], size: int) -> Tuple[Index, ...]:
+        has_ellipsis = t.count(Ellipsis)
+        if has_ellipsis > 1:
+            raise IndexError("an index can only have a single ellipsis ('...')")
+        if has_ellipsis and len(self.shape) > len(t):
+            ellipsis_index = t.index(Ellipsis)
+            shape = list(self.shape)
+            del shape[ellipsis_index : ellipsis_index + len(shape) - len(t)]
+        else:
+            shape = self.shape
+        return tuple(map(self._normalize_index, t, shape))
 
 
 class Segy:

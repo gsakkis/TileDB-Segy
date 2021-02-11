@@ -118,8 +118,12 @@ def assert_equal_arrays(
 def iter_slices(i: int, j: int) -> Iterable[slice]:
     assert 0 <= i < j
     slice_args = it.chain(
+        # non-negative start stop step
         it.product((None, i), (None, j), (None, 2)),
+        # non-negative start stop, negative step
         it.product((None, j - 1), (None, i - 1) if i > 0 else (None,), (-1, -2)),
+        # negative start and/or stop
+        [(-1, None, None), (None, -1, None), (-2, -1, None), (-1, -2, -1)],
     )
     return it.starmap(slice, slice_args)
 

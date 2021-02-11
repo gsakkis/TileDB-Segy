@@ -72,13 +72,11 @@ class LabelIndexer:
 
     def _label_slice_to_indices(self, label_slice: slice) -> np.ndarray:
         start, stop, step = label_slice.start, label_slice.stop, label_slice.step
-        min_label = self._min_label
-        if step is None or step > 0:  # increasing step
-            if start is None or start < min_label:
-                start = min_label
-        else:  # decreasing step
-            if stop is None or stop < min_label - 1:
-                stop = min_label - 1
+        increasing = step is None or step > 0
+        if start is None and increasing:
+            start = self._min_label
+        elif stop is None and not increasing:
+            stop = self._min_label - 1
 
         label_range = np.arange(*slice(start, stop, step).indices(self._max_label))
         indices = self._sorter[
