@@ -246,19 +246,14 @@ class TestStructuredSegy:
         i = np.random.randint(0, len(s.samples) // 2)
         j = np.random.randint(i + 1, len(s.samples))
         x = np.random.choice(s.offsets)
-
-        # one line, x offset
-        with pytest.raises(IndexError):
-            t.depth_slice[i, x]
-        with pytest.raises(TypeError):
-            s.depth_slice[i, x]
-
-        for sl in iter_slices(i, j):
-            # slice lines, x offset
-            with pytest.raises(IndexError):
-                t.depth_slice[sl, x]
+        for a in t, s:
             with pytest.raises(TypeError):
-                s.depth_slice[sl, x]
+                # one depth, x offset
+                a.depth_slice[i, x]
+            for sl in iter_slices(i, j):
+                with pytest.raises(TypeError):
+                    # slice depths, x offset
+                    a.depth_slice[sl, x]
 
     @parametrize_segys("t", "s", structured=True, multiple_offsets=True)
     def test_depth_slice_many_offsets(self, t: StructuredSegy, s: SegyFile) -> None:
@@ -266,20 +261,15 @@ class TestStructuredSegy:
         # https://github.com/equinor/segyio/issues/474
         i = np.random.randint(0, len(s.samples) // 2)
         j = np.random.randint(i + 1, len(s.samples))
-
         for sl2 in iter_slices(s.offsets[1], s.offsets[3]):
-            # one depth, slice offsets
-            with pytest.raises(IndexError):
-                t.depth_slice[i, sl2]
-            with pytest.raises(TypeError):
-                s.depth_slice[i, sl2]
-
-            for sl1 in iter_slices(i, j):
-                # slice depths, slice offsets
-                with pytest.raises(IndexError):
-                    t.depth_slice[sl1, sl2]
+            for a in t, s:
                 with pytest.raises(TypeError):
-                    s.depth_slice[sl1, sl2]
+                    # one depth, slice offsets
+                    a.depth_slice[i, sl2]
+                for sl1 in iter_slices(i, j):
+                    with pytest.raises(TypeError):
+                        # slice depths, slice offsets
+                        a.depth_slice[sl1, sl2]
 
     @parametrize_segys("t", "s", structured=True)
     def test_gather(self, t: StructuredSegy, s: SegyFile) -> None:

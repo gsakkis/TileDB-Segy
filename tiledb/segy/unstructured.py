@@ -96,9 +96,13 @@ class Depth:
         return cast(int, self._tdb.shape[-1])
 
     def __getitem__(self, i: Index) -> np.ndarray:
+        if not isinstance(i, (int, slice)):
+            raise TypeError(
+                f"depth indices must be integers or slices, not {i.__class__.__name__}"
+            )
         ndim = self._tdb.ndim
         if ndim > 2:
-            # segyio doesn't currently support offset indexing for depth; always selects the first
+            # segyio currently selects the first offset for depth slicing
             # https://github.com/equinor/segyio/issues/474
             data = self._tdb[..., 0, i]
             ndim -= 1
