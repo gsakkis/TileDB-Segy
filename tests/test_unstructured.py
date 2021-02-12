@@ -72,8 +72,10 @@ class TestSegy:
         assert_equal_arrays(t.trace[i, x], s.trace[i, x])
 
         # one-slice trace, one sample: these are (1,1) arrays, not scalar
-        assert_equal_arrays(t.trace[:1, x], collect(s.trace[:1, x]))
-        assert_equal_arrays(t.trace[0::-1, x], collect(s.trace[0::-1, x]))
+        assert_equal_arrays(t.trace[i : i + 1, x], collect(s.trace[i : i + 1, x]))
+        assert_equal_arrays(
+            t.trace[j : j - 1 : -1, x], collect(s.trace[j : j - 1 : -1, x])
+        )
 
         # one trace, slice samples
         for sl in iter_slices(x, y):
@@ -90,9 +92,6 @@ class TestSegy:
                     assert_equal_arrays(t.trace[sl1, sl2], collect(s.trace[sl1, sl2]))
             except MultiSliceError as ex:
                 pytest.xfail(str(ex))
-
-        with pytest.raises((IndexError, TypeError)):
-            t.trace[float(i), 0]
 
     @parametrize_segys("t", "s")
     def test_header(self, t: Segy, s: SegyFile) -> None:

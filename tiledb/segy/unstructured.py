@@ -4,12 +4,12 @@ from types import TracebackType
 from typing import List, Optional, Tuple, Type, Union, cast
 
 import numpy as np
-import wrapt
 from segyio import TraceSortingFormat
 
 import tiledb
 
 from .singledispatchmethod import singledispatchmethod  # type: ignore
+from .tdbwrapper import MultiAttrArrayWrapper, SingleAttrArrayWrapper
 from .types import Ellipsis, Field, Index, cached_property, ellipsis
 from .utils import ensure_slice
 
@@ -23,14 +23,14 @@ class TraceIndexer:
 
     def __getitem__(
         self, trace_index: Index
-    ) -> Tuple[Tuple[Index, ...], Union[int, List[int], ellipsis]]:
+    ) -> Tuple[Tuple[Index, ...], Union[List[int], ellipsis]]:
         """
         Given a trace index, return a `(bounding_box, post_reshape_indices)` tuple where:
-        - `bounding_box` is a tuple of (int or slice) indices for each dimension in shape that
-          enclose all data of the requested `trace_index`.
-        - `post_reshape_indices` is a list of indices to select from the reshaped 1-dimensional
-          bounding box in order to get the requested `trace_index` data. It may also be ellipsis
-          (...) if the whole bounding box is to be selected.
+        - `bounding_box` is a tuple of (int or slice) indices for each dimension in shape
+            that enclose all data of the requested `trace_index`.
+        - `post_reshape_indices` is a list of indices to select from the reshaped 1D
+            bounding box in order to get the requested `trace_index` data. It may also
+            be ellipsis (...) if the whole bounding box is to be selected.
         """
         return (trace_index,), Ellipsis
 
@@ -112,42 +112,6 @@ class Depth:
         return np.moveaxis(data, -1, 0) if data.ndim == ndim else data
 
 
-class TiledbArrayWrapper(wrapt.ObjectProxy):
-    """
-    TileDB array wrapper that provides standard python/numpy semantics for
-    indexing slices with negative step.
-    """
-
-    def __getitem__(self, i: Union[ellipsis, Index, Tuple[Index, ...]]) -> np.ndarray:
-        return self.__wrapped__[self._normalize_index(i, self.shape[0])]
-
-    @singledispatchmethod
-    def _normalize_index(
-        self, i: Union[int, ellipsis], size: int
-    ) -> Union[int, ellipsis]:
-        return i if i is Ellipsis or i >= 0 else size + i
-
-    @_normalize_index.register(slice)
-    def _normalize_slice(self, s: slice, size: int) -> slice:
-        start, stop, step = s.indices(size)
-        if step < 0:
-            start, stop = stop + 1, start + 1
-        return slice(start, stop, step)
-
-    @_normalize_index.register(tuple)
-    def _normalize_tuple(self, t: Tuple[Index, ...], size: int) -> Tuple[Index, ...]:
-        has_ellipsis = t.count(Ellipsis)
-        if has_ellipsis > 1:
-            raise IndexError("an index can only have a single ellipsis ('...')")
-        if has_ellipsis and len(self.shape) > len(t):
-            ellipsis_index = t.index(Ellipsis)
-            shape = list(self.shape)
-            del shape[ellipsis_index : ellipsis_index + len(shape) - len(t)]
-        else:
-            shape = self.shape
-        return tuple(map(self._normalize_index, t, shape))
-
-
 class Segy:
     _indexer_cls: Type[TraceIndexer] = TraceIndexer
 
@@ -156,12 +120,10 @@ class Segy:
         data: tiledb.Array,
         headers: tiledb.Array,
         uri: Optional[PurePath] = None,
-        ctx: Optional[tiledb.Ctx] = None,
     ):
-        self._data = TiledbArrayWrapper(data)
-        self._headers = TiledbArrayWrapper(headers)
+        self._data = SingleAttrArrayWrapper(data, attr="trace")
+        self._headers = MultiAttrArrayWrapper(headers)
         self._uri = uri or PurePath(os.devnull)
-        self._ctx = ctx
 
     @property
     def uri(self) -> PurePath:
@@ -199,8 +161,10 @@ class Segy:
         return Header(self._headers, self._indexer_cls(self._headers.shape))
 
     def attributes(self, name: str) -> Attributes:
-        tdb = tiledb.open(self._headers.uri, attr=name, ctx=self._ctx)
-        return Attributes(TiledbArrayWrapper(tdb), self._indexer_cls(tdb.shape))
+        return Attributes(
+            SingleAttrArrayWrapper(self._headers.__wrapped__, attr=name),
+            self._indexer_cls(self._headers.shape),
+        )
 
     @cached_property
     def depth_slice(self) -> Depth:

@@ -30,4 +30,4 @@ def open2(
         cls = Segy
     else:
         cls = StructuredSegy
-    return cls(data, headers, ctx=ctx)
+    return cls(data, headers)
