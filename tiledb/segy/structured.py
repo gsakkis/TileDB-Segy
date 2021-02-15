@@ -9,7 +9,6 @@ import tiledb
 from .singledispatchmethod import singledispatchmethod  # type: ignore
 from .types import Ellipsis, Index, NestedFieldList, cached_property, ellipsis
 from .unstructured import Header, Segy, TraceIndexer
-from .utils import ensure_slice
 
 
 class StructuredTraceIndexer(TraceIndexer):
@@ -23,14 +22,16 @@ class StructuredTraceIndexer(TraceIndexer):
         return np.unravel_index(trace_index, self._shape), Ellipsis
 
     @__getitem__.register(slice)
-    def _get_many(self, trace_index: slice) -> Tuple[Tuple[slice, ...], List[int]]:
+    def _get_many(self, trace_index: slice) -> Tuple[Tuple[List[int], ...], List[int]]:
         # get indices in 1D (trace index) and 3D (fast-slow-offset indices)
         raveled_indices = np.arange(len(self))[trace_index]
         unraveled_indices = np.unravel_index(raveled_indices, self._shape)
         unique_unraveled_indices = tuple(map(np.unique, unraveled_indices))
         if (trace_index.step or 1) < 0:
             unique_unraveled_indices = tuple(map(np.flip, unique_unraveled_indices))
-        bounding_box = tuple(map(ensure_slice, unique_unraveled_indices))
+        bounding_box = cast(
+            Tuple[List[int]], tuple(map(list, unique_unraveled_indices))
+        )
 
         # find the requested subset of indices from the cartesian product
         points = frozenset(zip(*unraveled_indices))
@@ -67,10 +68,7 @@ class LabelIndexer:
         return int(indices[0])
 
     @__getitem__.register(slice)
-    def _get_many(self, label_slice: slice) -> slice:
-        return ensure_slice(self._label_slice_to_indices(label_slice))
-
-    def _label_slice_to_indices(self, label_slice: slice) -> np.ndarray:
+    def _get_many(self, label_slice: slice) -> List[int]:
         start, stop, step = label_slice.start, label_slice.stop, label_slice.step
         increasing = step is None or step > 0
         if start is None and increasing:
@@ -82,7 +80,7 @@ class LabelIndexer:
         indices = self._sorter[
             self._labels.searchsorted(label_range, sorter=self._sorter)
         ]
-        return indices[self._labels[indices] == label_range]
+        return list(indices[self._labels[indices] == label_range])
 
 
 class Line:

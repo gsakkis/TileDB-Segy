@@ -11,7 +11,10 @@ import tiledb
 from .singledispatchmethod import singledispatchmethod  # type: ignore
 from .tdbwrapper import MultiAttrArrayWrapper, SingleAttrArrayWrapper
 from .types import Ellipsis, Field, Index, cached_property, ellipsis
-from .utils import ensure_slice
+
+
+def ensure_slice(i: Index) -> slice:
+    return i if isinstance(i, slice) else slice(i, i + 1)
 
 
 class TraceIndexer:
@@ -71,7 +74,7 @@ class Header(TraceIndexable):
     @__getitem__.register(int)
     @__getitem__.register(np.integer)
     def _get_one(self, i: int) -> Field:
-        return cast(Field, self[ensure_slice(i)][0])
+        return cast(Field, self[i : i + 1][0])
 
     @__getitem__.register(slice)
     def _get_many(self, i: slice) -> List[Field]:

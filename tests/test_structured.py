@@ -54,66 +54,42 @@ class TestLabelIndexer:
             indexer[dtype(42)]
 
     @pytest.mark.parametrize("dtype", int_types)
-    def test_get_slice_increasing_array(self, dtype: Type[Int]) -> None:
+    def test_get_slice(self, dtype: Type[Int]) -> None:
         array = np.array([10, 13, 17, 21, 26, 29, 31], dtype)
+
+        # increasing values
         indexer = LabelIndexer(array)
+        # positive step
+        assert indexer[5:21] == [0, 1, 2]
+        assert indexer[5:22] == [0, 1, 2, 3]
+        assert indexer[11:21] == [1, 2]
+        assert indexer[13:23:2] == [1, 2, 3]
+        assert indexer[13:33:8] == [1, 3, 5]
+        assert indexer[10:32:7] == [0, 2, 6]
+        # negative step
+        assert indexer[20:5:-1] == [2, 1, 0]
+        assert indexer[21:5:-1] == [3, 2, 1, 0]
+        assert indexer[21:12:-1] == [3, 2, 1]
+        assert indexer[19:12:-2] == [2, 1]
+        assert indexer[29:10:-8] == [5, 3, 1]
+        assert indexer[31:20:-5] == [6, 4, 3]
 
-        assert indexer[5:21] == slice(0, 3, 1)
-        assert indexer[5:22] == slice(0, 4, 1)
-        assert indexer[11:21] == slice(1, 3, 1)
-        assert indexer[13:23:2] == slice(1, 4, 1)
-        assert indexer[13:33:8] == slice(1, 6, 2)
-
-        label_slice = slice(10, 32, 7)
-        assert np.array_equal(
-            indexer._label_slice_to_indices(label_slice), np.array([0, 2, 6])
-        )
-        with pytest.raises(ValueError):
-            indexer[label_slice]
-
-        assert indexer[20:5:-1] == slice(2, None, -1)
-        assert indexer[21:5:-1] == slice(3, None, -1)
-        assert indexer[21:12:-1] == slice(3, 0, -1)
-        assert indexer[19:12:-2] == slice(2, 0, -1)
-        assert indexer[29:10:-8] == slice(5, 0, -2)
-
-        label_slice = slice(31, 20, -5)
-        assert np.array_equal(
-            indexer._label_slice_to_indices(label_slice), np.array([6, 4, 3])
-        )
-        with pytest.raises(ValueError):
-            indexer[label_slice]
-
-    @pytest.mark.parametrize("dtype", int_types)
-    def test_get_slice_decreasing_array(self, dtype: Type[Int]) -> None:
-        array = np.array([31, 29, 26, 21, 17, 13, 10], dtype)
-        indexer = LabelIndexer(array)
-
-        assert indexer[5:21] == slice(6, 3, -1)
-        assert indexer[5:22] == slice(6, 2, -1)
-        assert indexer[11:21] == slice(5, 3, -1)
-        assert indexer[13:23:2] == slice(5, 2, -1)
-        assert indexer[13:33:8] == slice(5, 0, -2)
-
-        label_slice = slice(10, 32, 7)
-        assert np.array_equal(
-            indexer._label_slice_to_indices(label_slice), np.array([6, 4, 0])
-        )
-        with pytest.raises(ValueError):
-            indexer[label_slice]
-
-        assert indexer[20:5:-1] == slice(4, 7, 1)
-        assert indexer[21:5:-1] == slice(3, 7, 1)
-        assert indexer[21:12:-1] == slice(3, 6, 1)
-        assert indexer[19:12:-2] == slice(4, 6, 1)
-        assert indexer[29:10:-8] == slice(1, 6, 2)
-
-        label_slice = slice(31, 20, -5)
-        assert np.array_equal(
-            indexer._label_slice_to_indices(label_slice), np.array([0, 2, 3])
-        )
-        with pytest.raises(ValueError):
-            indexer[label_slice]
+        # decreasing values
+        indexer = LabelIndexer(np.flip(array))
+        # positive step
+        assert indexer[5:21] == [6, 5, 4]
+        assert indexer[5:22] == [6, 5, 4, 3]
+        assert indexer[11:21] == [5, 4]
+        assert indexer[13:23:2] == [5, 4, 3]
+        assert indexer[13:33:8] == [5, 3, 1]
+        assert indexer[10:32:7] == [6, 4, 0]
+        # negative step
+        assert indexer[20:5:-1] == [4, 5, 6]
+        assert indexer[21:5:-1] == [3, 4, 5, 6]
+        assert indexer[21:12:-1] == [3, 4, 5]
+        assert indexer[19:12:-2] == [4, 5]
+        assert indexer[29:10:-8] == [1, 3, 5]
+        assert indexer[31:20:-5] == [0, 2, 3]
 
 
 class TestStructuredSegy:

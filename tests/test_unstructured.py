@@ -6,7 +6,6 @@ from tiledb.libtiledb import TileDBError
 
 import tiledb.segy
 from tiledb.segy import Segy
-from tiledb.segy.utils import MultiSliceError
 
 from .conftest import (
     assert_equal_arrays,
@@ -82,16 +81,13 @@ class TestSegy:
             assert_equal_arrays(t.trace[i, sl], s.trace[i, sl])
 
         for sl1 in iter_slices(i, j):
-            try:
-                # slices traces, all samples
-                assert_equal_arrays(t.trace[sl1], collect(s.trace[sl1]))
-                # slices traces, one sample
-                assert_equal_arrays(t.trace[sl1, x], collect(s.trace[sl1, x]))
-                # slices traces, slice samples
-                for sl2 in iter_slices(x, y):
-                    assert_equal_arrays(t.trace[sl1, sl2], collect(s.trace[sl1, sl2]))
-            except MultiSliceError as ex:
-                pytest.xfail(str(ex))
+            # slices traces, all samples
+            assert_equal_arrays(t.trace[sl1], collect(s.trace[sl1]))
+            # slices traces, one sample
+            assert_equal_arrays(t.trace[sl1, x], collect(s.trace[sl1, x]))
+            # slices traces, slice samples
+            for sl2 in iter_slices(x, y):
+                assert_equal_arrays(t.trace[sl1, sl2], collect(s.trace[sl1, sl2]))
 
     @parametrize_segys("t", "s")
     def test_header(self, t: Segy, s: SegyFile) -> None:
@@ -109,10 +105,7 @@ class TestSegy:
             slice(i + 3, i, -1),
         ]
         for sl in slices:
-            try:
-                assert t.header[sl] == stringify_keys(s.header[sl])
-            except MultiSliceError as ex:
-                pytest.xfail(str(ex))
+            assert t.header[sl] == stringify_keys(s.header[sl])
 
         with pytest.raises(TypeError):
             t.header[i, 0]
@@ -128,10 +121,7 @@ class TestSegy:
         j = np.random.randint(i + 1, s.tracecount)
         assert_equal_arrays(t_attrs[i], s_attrs[i])
         for sl in iter_slices(i, j):
-            try:
-                assert_equal_arrays(t_attrs[sl], s_attrs[sl])
-            except MultiSliceError as ex:
-                pytest.xfail(str(ex))
+            assert_equal_arrays(t_attrs[sl], s_attrs[sl])
 
         with pytest.raises(TypeError):
             t_attrs[i, 0]
