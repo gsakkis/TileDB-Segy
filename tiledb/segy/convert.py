@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from collections import namedtuple
 from contextlib import contextmanager
 from pathlib import PurePath
-from typing import Any, Iterable, Iterator, Optional, Union, cast
+from typing import Any, Iterable, Iterator, Optional, Union
 
 import numpy as np
 import segyio
@@ -68,7 +68,7 @@ class SegyFileConverter(ABC):
                 cls = UnstructuredSegyFileConverter
             else:
                 cls = StructuredSegyFileConverter
-        return cast(SegyFileConverter, super().__new__(cls))
+        return super().__new__(cls)
 
     def __init__(
         self,
