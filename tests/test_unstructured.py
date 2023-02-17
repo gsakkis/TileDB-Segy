@@ -2,7 +2,6 @@ import numpy as np
 import pytest
 import segyio.tools
 from segyio import SegyFile, TraceField
-from tiledb.libtiledb import TileDBError
 
 import tiledb.segy
 from tiledb.segy import Segy
@@ -38,14 +37,14 @@ class TestSegy:
     def test_close(self, t: Segy, s: SegyFile) -> None:
         t.bin
         t.close()
-        with pytest.raises(TileDBError):
+        with pytest.raises(tiledb.TileDBError):
             t.bin
 
     @parametrize_segys("t", "s")
     def test_context_manager(self, t: Segy, s: SegyFile) -> None:
         with tiledb.segy.open(t.uri) as t2:
             t2.bin
-        with pytest.raises(TileDBError):
+        with pytest.raises(tiledb.TileDBError):
             t2.bin
 
     @parametrize_segys("t", "s")

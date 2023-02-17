@@ -22,7 +22,7 @@ def tdb_wrapper(
     np_array: np.ndarray,
 ) -> tiledb.Array:
     uri = str(tmp_path_factory.mktemp("array"))
-    with tiledb.DenseArray.from_numpy(uri, np_array) as tdb:
+    with tiledb.from_numpy(uri, np_array) as tdb:
         if request.param:
             yield SingleAttrArrayWrapper(tdb, "")
         else:

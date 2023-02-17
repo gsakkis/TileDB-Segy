@@ -1,0 +1,16 @@
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = ["setuptools>=67", "wheel"]
+
+[tool.ruff]
+ignore = ["E501"]
+extend-select = ["I001"]
+fix = true
+
+[tool.mypy]
+show_error_codes = true
+namespace_packages = false
+warn_unreachable = true
+strict = true
+disallow_untyped_decorators = false
+disallow_subclassing_any = false
