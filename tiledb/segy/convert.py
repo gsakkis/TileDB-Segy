@@ -256,8 +256,10 @@ class StructuredSegyFileConverter(SegyFileConverter):
         get_line = self.segy_file.fast
         for offset_idx, offset in enumerate(self.segy_file.offsets):
             for sl in iter_slices(len(fast_lines), step):
-                cube = np.stack([get_line[i, offset] for i in fast_lines[sl]])
-                tdb[sl, :, offset_idx] = cube
+                # get_line[i, offset] returns a (slow, samples) 2D array
+                # reshape it to a (slow, offsets, samples) 3D array
+                lines = [np.expand_dims(get_line[i, offset], 1) for i in fast_lines[sl]]
+                tdb[sl, :, offset_idx, :] = np.stack(lines)
 
     def _fast_tile(self, trace_size: int) -> int:
         num_fast, num_slow = map(
