@@ -1,28 +1,28 @@
 import itertools as it
-from typing import List, Tuple, Union, cast
+from functools import singledispatchmethod
+from typing import List, Tuple, Union, cast, overload
 
 import numpy as np
 from segyio import TraceSortingFormat
 
 import tiledb
 
-from .singledispatchmethod import singledispatchmethod  # type: ignore
-from .types import Ellipsis, Index, NestedFieldList, cached_property, ellipsis
+from .types import (
+    Ellipsis,
+    ExtendedIndex,
+    ExtendedIndices,
+    Index,
+    NestedFieldList,
+    cached_property,
+)
 from .unstructured import Header, Segy, TraceIndexer
 
 
 class StructuredTraceIndexer(TraceIndexer):
-    @singledispatchmethod
-    def __getitem__(self, i: object) -> None:
-        raise TypeError(f"Cannot index by {i.__class__}")
+    def __getitem__(self, trace_index: Index) -> Tuple[ExtendedIndices, ExtendedIndex]:
+        if isinstance(trace_index, int):
+            return np.unravel_index(trace_index, self._shape), Ellipsis
 
-    @__getitem__.register(int)
-    @__getitem__.register(np.integer)
-    def _get_one(self, trace_index: int) -> Tuple[Tuple[int, ...], ellipsis]:
-        return np.unravel_index(trace_index, self._shape), Ellipsis
-
-    @__getitem__.register(slice)
-    def _get_many(self, trace_index: slice) -> Tuple[Tuple[List[int], ...], List[int]]:
         # get indices in 1D (trace index) and 3D (fast-slow-offset indices)
         raveled_indices = np.arange(len(self))[trace_index]
         unraveled_indices = np.unravel_index(raveled_indices, self._shape)
@@ -55,20 +55,22 @@ class LabelIndexer:
         self._sorter = labels.argsort()
 
     @singledispatchmethod
-    def __getitem__(self, i: object) -> None:
+    def _get_index(self, i: Index) -> Union[int, List[int]]:
         raise TypeError(f"Cannot index by {i.__class__}")
 
-    @__getitem__.register(int)
-    @__getitem__.register(np.integer)
-    def _get_one(self, label: int) -> int:
+    @overload
+    @_get_index.register(np.integer)
+    @_get_index.register
+    def __getitem__(self, label: int) -> int:
         indices = np.flatnonzero(label == self._labels)
         assert indices.size <= 1, indices
         if indices.size == 0:
             raise ValueError(f"{label} is not in labels")
         return int(indices[0])
 
-    @__getitem__.register(slice)
-    def _get_many(self, label_slice: slice) -> List[int]:
+    @overload
+    @_get_index.register
+    def __getitem__(self, label_slice: slice) -> List[int]:
         start, stop, step = label_slice.start, label_slice.stop, label_slice.step
         increasing = step is None or step > 0
         if start is None and increasing:
@@ -81,6 +83,9 @@ class LabelIndexer:
             self._labels.searchsorted(label_range, sorter=self._sorter)
         ]
         return list(indices[self._labels[indices] == label_range])
+
+    def __getitem__(self, i: Index) -> Union[int, List[int]]:
+        return self._get_index(i)
 
 
 class Line:
@@ -111,9 +116,9 @@ class Line:
 
     _dims = property(lambda self: [dim.name for dim in self._tdb.schema.domain])
 
-    def _get_tdb_indices(self, labels: Index, offsets: Index) -> Tuple[Index, ...]:
+    def _get_tdb_indices(self, labels: Index, offsets: Index) -> ExtendedIndices:
         dims = self._dims
-        composite_index = [slice(None)] * self._tdb.ndim
+        composite_index: List[ExtendedIndex] = [slice(None)] * self._tdb.ndim
         composite_index[dims.index(self.name)] = self._label_indexer[labels]
         composite_index[dims.index("offsets")] = self._offset_indexer[offsets]
         return tuple(composite_index)
@@ -185,7 +190,7 @@ class Gather:
             offsets = self._default_offset
 
         dims = tuple(dim.name for dim in self._tdb.schema.domain)
-        composite_index = [None] * 3
+        composite_index: List[ExtendedIndex] = [slice(None)] * 3
         composite_index[dims.index("ilines")] = self._iline_indexer[ilines]
         composite_index[dims.index("xlines")] = self._xline_indexer[xlines]
         composite_index[dims.index("offsets")] = self._offset_indexer[offsets]

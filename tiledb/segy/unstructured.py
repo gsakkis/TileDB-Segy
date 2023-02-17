@@ -1,16 +1,23 @@
 import os
+from functools import singledispatchmethod
 from pathlib import PurePath
 from types import TracebackType
-from typing import List, Optional, Tuple, Type, Union, cast
+from typing import List, Optional, Tuple, Type, Union, cast, overload
 
 import numpy as np
 from segyio import TraceSortingFormat
 
 import tiledb
 
-from .singledispatchmethod import singledispatchmethod  # type: ignore
 from .tdbwrapper import MultiAttrArrayWrapper, SingleAttrArrayWrapper
-from .types import Ellipsis, Field, Index, cached_property, ellipsis
+from .types import (
+    Ellipsis,
+    ExtendedIndex,
+    ExtendedIndices,
+    Field,
+    Index,
+    cached_property,
+)
 
 
 def ensure_slice(i: Index) -> slice:
@@ -24,9 +31,7 @@ class TraceIndexer:
     def __len__(self) -> int:
         return int(np.asarray(self._shape).prod())
 
-    def __getitem__(
-        self, trace_index: Index
-    ) -> Tuple[Tuple[Index, ...], Union[List[int], ellipsis]]:
+    def __getitem__(self, trace_index: Index) -> Tuple[ExtendedIndices, ExtendedIndex]:
         """
         Given a trace index, return a `(bounding_box, post_reshape_indices)` tuple where:
         - `bounding_box` is a tuple of (int or slice) indices for each dimension in shape
@@ -68,21 +73,25 @@ class Trace(TraceIndexable):
 
 class Header(TraceIndexable):
     @singledispatchmethod
-    def __getitem__(self, i: object) -> None:
+    def _get_index(self, i: Index) -> Union[Field, List[Field]]:
         raise TypeError(f"Cannot index by {i.__class__}")
 
-    @__getitem__.register(int)
-    @__getitem__.register(np.integer)
-    def _get_one(self, i: int) -> Field:
-        return cast(Field, self[i : i + 1][0])
+    @overload
+    @_get_index.register
+    def __getitem__(self, i: int) -> Field:
+        return self[i : i + 1][0]
 
-    @__getitem__.register(slice)
-    def _get_many(self, i: slice) -> List[Field]:
+    @overload
+    @_get_index.register
+    def __getitem__(self, i: slice) -> List[Field]:
         bounding_box, post_reshape_indices = self._indexer[i]
         header_arrays = self._tdb[bounding_box]
         keys = header_arrays.keys()
         columns = [header_arrays[key].reshape(-1)[post_reshape_indices] for key in keys]
         return [dict(zip(keys, row)) for row in zip(*columns)]
+
+    def __getitem__(self, i: Index) -> Union[Field, List[Field]]:
+        return self._get_index(i)
 
 
 class Attributes(TraceIndexable):

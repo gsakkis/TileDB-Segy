@@ -15,17 +15,14 @@ the same shape. That is, `a[[1,3], [2,5]]` for a TileDB array wrapper is equival
 `a[np.ix_([1,3], [2,5])]` for a Numpy array.
 """
 
-from typing import Dict, List, Tuple, Union
+from typing import Dict, Union
 
 import numpy as np
 import wrapt
 
 import tiledb
 
-from .types import Ellipsis, ellipsis
-
-ExtendedIndex = Union[int, slice, List[int], ellipsis]
-ExtendedIndices = Union[ExtendedIndex, Tuple[ExtendedIndex, ...]]
+from .types import Ellipsis, ExtendedIndex, ExtendedIndices
 
 
 class SingleAttrArrayWrapper(wrapt.ObjectProxy):
@@ -37,7 +34,7 @@ class SingleAttrArrayWrapper(wrapt.ObjectProxy):
         super().__init__(array)
         self._self_attr = attr
 
-    def __getitem__(self, indices: ExtendedIndices) -> np.ndarray:
+    def __getitem__(self, indices: Union[ExtendedIndex, ExtendedIndices]) -> np.ndarray:
         if not isinstance(indices, tuple):
             indices = (indices,)
         query = self.query(attrs=(self._self_attr,))
@@ -53,7 +50,9 @@ class MultiAttrArrayWrapper(wrapt.ObjectProxy):
         super().__init__(array)
         self._self_attrs = attrs
 
-    def __getitem__(self, indices: ExtendedIndices) -> Dict[str, np.ndarray]:
+    def __getitem__(
+        self, indices: Union[ExtendedIndex, ExtendedIndices]
+    ) -> Dict[str, np.ndarray]:
         if not isinstance(indices, tuple):
             indices = (indices,)
         query = self.query(attrs=self._self_attrs or None)
