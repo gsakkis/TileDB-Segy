@@ -7,7 +7,7 @@ with Path(__file__).parent.joinpath("README.md").open() as f:
 
 setup(
     name="tiledb-segy",
-    version="0.3.0",
+    version="0.3.1",
     description="Python library for fast access to seismic data using TileDB",
     long_description=long_description,
     long_description_content_type="text/markdown",
