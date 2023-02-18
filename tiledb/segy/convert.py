@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from collections import namedtuple
 from contextlib import contextmanager
 from pathlib import PurePath
-from typing import Any, Iterable, Iterator, Optional, Union
+from typing import Any, Iterable, Iterator, Union
 
 import numpy as np
 import segyio
@@ -70,19 +70,12 @@ class SegyFileConverter(ABC):
                 cls = StructuredSegyFileConverter
         return super().__new__(cls)
 
-    def __init__(
-        self,
-        segy_file: segyio.SegyFile,
-        *,
-        tile_size: int,
-        config: Optional[tiledb.Config] = None,
-    ):
+    def __init__(self, segy_file: segyio.SegyFile, *, tile_size: int):
         if not isinstance(segy_file, ExtendedSegyFile):
             segy_file = copy.copy(segy_file)
             segy_file.__class__ = ExtendedSegyFile
         self.segy_file = segy_file
         self.tile_size = tile_size
-        self.config = config
 
     def to_tiledb(self, uri: Union[str, PurePath]) -> None:
         uri = URL(uri) if not isinstance(uri, PurePath) else uri
@@ -135,8 +128,6 @@ class SegyFileConverter(ABC):
         tiledb.Array.create(uri, schema)
         with tiledb.open(uri, mode="w") as tdb:
             yield tdb
-        tiledb.consolidate(uri, config=self.config)
-        tiledb.vacuum(uri, config=self.config)
 
     @abstractmethod
     def _get_dims(self, trace_size: int) -> Iterable[tiledb.Dim]:

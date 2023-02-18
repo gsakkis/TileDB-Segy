@@ -21,9 +21,8 @@ def test_minimal(
 
     assert SegyFileConverter.call_count == 1
     converter_kwargs = SegyFileConverter.call_args[1]
-    assert set(converter_kwargs.keys()) == {"tile_size", "config"}
+    assert set(converter_kwargs.keys()) == {"tile_size"}
     assert converter_kwargs["tile_size"] == 4_000_000
-    assert converter_kwargs["config"]["sm.consolidation.buffer_size"] == str(5_000_000)
 
     to_tiledb = SegyFileConverter.return_value.to_tiledb
     assert to_tiledb.call_count == 1
@@ -49,7 +48,6 @@ def test_maximal(
             "--xline=67",
             "--endian=little",
             "--tile-size=1234567",
-            "--consolidation-buffersize=987654321",
         ]
     )
 
@@ -61,9 +59,8 @@ def test_maximal(
 
     assert SegyFileConverter.call_count == 1
     converter_kwargs = SegyFileConverter.call_args[1]
-    assert set(converter_kwargs.keys()) == {"tile_size", "config"}
+    assert set(converter_kwargs.keys()) == {"tile_size"}
     assert converter_kwargs["tile_size"] == 1234567
-    assert converter_kwargs["config"]["sm.consolidation.buffer_size"] == "987654321"
 
     to_tiledb = SegyFileConverter.return_value.to_tiledb
     assert to_tiledb.call_count == 1

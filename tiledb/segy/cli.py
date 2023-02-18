@@ -7,8 +7,6 @@ from typing import List, Optional
 
 import segyio
 
-import tiledb
-
 from .convert import SegyFileConverter
 
 
@@ -72,12 +70,6 @@ def get_parser() -> ArgumentParser:
         help="Tile size in bytes.\n"
         "Larger tile size improves disk access time at the cost of higher memory",
     )
-    tiledb_args.add_argument(
-        "--consolidation-buffersize",
-        type=int,
-        default=5_000_000,
-        help="The size in bytes of the attribute buffers used during consolidation",
-    )
 
     return parser
 
@@ -105,15 +97,9 @@ def main(argv: Optional[List[str]] = None) -> None:
     else:
         segyio_kwargs["strict"] = args.geometry != "auto"
 
-    converter_kwargs = dict(
-        tile_size=args.tile_size,
-        config=tiledb.Config(
-            {"sm.consolidation.buffer_size": args.consolidation_buffersize}
-        ),
-    )
     open_seismic = segyio.su.open if args.su else segyio.open
     with open_seismic(**segyio_kwargs) as f:
-        converter = SegyFileConverter(f, **converter_kwargs)  # type: ignore
+        converter = SegyFileConverter(f, tile_size=args.tile_size)  # type: ignore
         converter.to_tiledb(args.output)
 
 

@@ -62,7 +62,6 @@ To see the full list of options run:
     usage: segy2tiledb [-h] [-o] [-g {auto,structured,unstructured}] [--su]
                        [--iline ILINE] [--xline XLINE]
                        [--endian {big,msb,little,lsb}] [-s TILE_SIZE]
-                       [--consolidation-buffersize CONSOLIDATION_BUFFERSIZE]
                        input [output]
 
     Convert a SEG-Y file to tiledb-segy format
@@ -92,8 +91,6 @@ To see the full list of options run:
       -s TILE_SIZE, --tile-size TILE_SIZE
                             Tile size in bytes.
                             Larger tile size improves disk access time at the cost of higher memory (default: 4000000)
-      --consolidation-buffersize CONSOLIDATION_BUFFERSIZE
-                            The size in bytes of the attribute buffers used during consolidation (default: 5000000)
 
 
 ## API ##
